@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>TRASOCHY 控制面板</title>
+    <hta:application 
+        id="appLauncher" 
+        applicationname="TrasochyLauncher" 
+        border="thin" 
+        borderstyle="normal" 
+        caption="yes" 
+        contextmenu="no" 
+        innerborder="no" 
+        maximizebutton="no" 
+        minimizebutton="yes" 
+        navigable="no" 
+        scroll="no" 
+        selection="no" 
+        showintaskbar="yes" 
+        singleinstance="yes" 
+        sysmenu="yes" 
+        version="1.0" 
+        windowstate="normal" 
+    />
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            text-align: center;
+            margin: 0;
+            padding: 25px;
+        }
+        h2 {
+            color: #0f172a;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        p.subtitle {
+            color: #64748b;
+            font-size: 13px;
+            margin-bottom: 30px;
+        }
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 85%;
+            margin: 15px auto;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            letter-spacing: 2px;
+        }
+        .btn:active {
+            transform: scale(0.98);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .btn-start { background-color: #10b981; }
+        .btn-start:hover { background-color: #059669; }
+        
+        .btn-restart { background-color: #3b82f6; }
+        .btn-restart:hover { background-color: #2563eb; }
+        
+        .btn-stop { background-color: #ef4444; }
+        .btn-stop:hover { background-color: #dc2626; }
+
+        .icon {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+
+        .status-container {
+            margin-top: 30px;
+            padding: 12px;
+            border-radius: 6px;
+            background-color: #f1f5f9;
+            font-size: 14px;
+            color: #475569;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            transition: background-color 0.3s;
+        }
+
+        .light-red {
+            background-color: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+        }
+
+        .light-green {
+            background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+        
+        .light-yellow {
+            background-color: #f59e0b;
+            box-shadow: 0 0 8px #f59e0b;
+        }
+    </style>
+    <script language="JScript">
+        // 设置窗口居中
+        var windowWidth = 360;
+        var windowHeight = 440;
+        window.resizeTo(windowWidth, windowHeight);
+        window.moveTo((screen.width - windowWidth) / 2, (screen.height - windowHeight) / 2);
+
+        var shell = new ActiveXObject("WScript.Shell");
+        
+        function getProjectPath() {
+            var path = unescape(location.pathname);
+            if (path.charAt(0) == '/') path = path.substring(1);
+            path = path.replace(/\//g, '\\');
+            var launcherDir = path.substring(0, path.lastIndexOf('\\'));
+            var projectDir = launcherDir.substring(0, launcherDir.lastIndexOf('\\'));
+            return projectDir;
+        }
+
+        function runCommand(cmd, windowStyle) {
+            try {
+                // windowStyle: 0 = hide, 1 = normal, 7 = minimized
+                shell.Run(cmd, windowStyle, false);
+            } catch (e) {
+                alert("执行命令出错: " + e.message);
+            }
+        }
+
+        var actionPending = false;
+        
+        function updateStatus(text, statusType) {
+            var textSpan = document.getElementById("status-text");
+            var lightSpan = document.getElementById("status-light");
+            
+            textSpan.innerText = "状态: " + text;
+            if (statusType === 'running') {
+                lightSpan.className = "light light-green";
+            } else if (statusType === 'stopped') {
+                lightSpan.className = "light light-red";
+            } else if (statusType === 'pending') {
+                lightSpan.className = "light light-yellow";
+            }
+        }
+
+        function setActionStatus(text, type) {
+            actionPending = true;
+            updateStatus(text, type);
+            setTimeout(function() {
+                actionPending = false;
+                checkProcess();
+            }, 3000);
+        }
+
+        function checkProcess() {
+            if (actionPending) return;
+            var isRunning = false;
+            try {
+                var wmiService = GetObject("winmgmts:\\\\.\\root\\cimv2");
+                var processes = wmiService.ExecQuery("Select * from Win32_Process Where Name = 'node.exe'");
+                var e = new Enumerator(processes);
+                if (!e.atEnd()) {
+                    isRunning = true;
+                }
+            } catch (e) {}
+            
+            if (isRunning) {
+                updateStatus("服务运行中", "running");
+            } else {
+                updateStatus("服务已关闭", "stopped");
+            }
+        }
+
+        window.onload = function() {
+            checkProcess();
+            setInterval(checkProcess, 2000);
+        };
+
+        function startApp() {
+            setActionStatus("正在启动系统...", "pending");
+            var projectDir = getProjectPath();
+            
+            // 使用自动重启脚本启动服务，确保服务崩溃时自动重启
+            var appCmd = 'cmd.exe /c ""' + projectDir + '\\launcher\\start.bat""';
+            runCommand(appCmd, 1);
+        }
+
+        function stopApp() {
+            setActionStatus("正在停止服务...", "pending");
+            // 先关闭自动重启的守护窗口
+            runCommand('taskkill /F /FI "WINDOWTITLE eq TRASOCHY Server Auto-Restart*" /T', 0);
+            // 杀死 node.exe 进程
+            runCommand('taskkill /F /IM node.exe /T', 0);
+        }
+
+        function restartApp() {
+            setActionStatus("正在重启服务...", "pending");
+            runCommand('taskkill /F /FI "WINDOWTITLE eq TRASOCHY Server Auto-Restart*" /T', 0);
+            runCommand('taskkill /F /IM node.exe /T', 0);
+            setTimeout(function() {
+                startApp();
+            }, 1500);
+        }
+    </script>
+</head>
+<body>
+    <h2>TRASOCHY Shop</h2>
+    <p class="subtitle">系统快捷控制面板</p>
+
+    <button class="btn btn-start" onclick="startApp()">
+        <span class="icon">🚀</span> 启 动 系 统
+    </button>
+    <button class="btn btn-restart" onclick="restartApp()">
+        <span class="icon">🔄</span> 重 启 服 务
+    </button>
+    <button class="btn btn-stop" onclick="stopApp()">
+        <span class="icon">⏹</span> 停 止 运 行
+    </button>
+
+    <div class="status-container">
+        <span id="status-light" class="light light-red"></span>
+        <span id="status-text">状态: 待机中 (检测中...)</span>
+    </div>
+</body>
+</html>

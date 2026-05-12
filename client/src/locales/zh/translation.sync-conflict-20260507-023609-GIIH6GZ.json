@@ -1,0 +1,259 @@
+{
+  "nav": {
+    "home": "首页",
+    "skincare_institute": "护肤研究院",
+    "brand_story": "品牌故事",
+    "login_register": "登录 / 注册"
+  },
+  "common": {
+    "search": "搜索...",
+    "cart": "购物车",
+    "profile": "个人中心",
+    "admin": "后台管理",
+    "logout": "退出登录",
+    "loading": "加载中...",
+    "save": "保存",
+    "cancel": "取消",
+    "view_all": "查看全部",
+    "view_more": "查看更多"
+  },
+  "home": {
+    "explore_all": "探索全部商品",
+    "join_member": "立即加入会员",
+    "explore_collections": "探索系列",
+    "best_sellers": "热销精选"
+  },
+  "profile": {
+    "title": "个人中心",
+    "tabs": {
+      "orders": "最近订单",
+      "favorites": "我的收藏",
+      "address": "收货地址",
+      "referrals": "我的推荐",
+      "subscriptions": "我的订阅"
+    },
+    "levels": {
+      "guest": "游客",
+      "member": "普通会员",
+      "silver": "白银会员",
+      "gold": "黄金会员"
+    },
+    "benefits": {
+      "title": "会员权益",
+      "guest": "登录后查看专属权益",
+      "member": {
+        "discount": "9折优惠",
+        "cs": "优先客服"
+      },
+      "silver": {
+        "discount": "8折优惠",
+        "shipping": "优先发货",
+        "gift": "生日礼品"
+      },
+      "gold": {
+        "discount": "7折专属价",
+        "cs": "VIP客服",
+        "new": "新品优先购",
+        "shipping": "免运费"
+      }
+    },
+    "stats": {
+      "spend": "累计消费：",
+      "points": "积分："
+    },
+    "orders": {
+      "recent": "最近订单",
+      "all": "全部订单 →",
+      "no": "订单号：",
+      "items": "{{count}} 件商品",
+      "empty": "暂无订单记录",
+      "shop": "去购物",
+      "status": {
+        "pending": "待付款",
+        "paid": "待发货",
+        "shipped": "已发货",
+        "delivered": "已完成",
+        "cancelled": "已取消"
+      }
+    },
+    "favorites": {
+      "title": "我的收藏",
+      "all": "查看全部 →",
+      "empty": "暂无收藏",
+      "discover": "去发现好物"
+    },
+    "address": {
+      "title": "收货地址",
+      "manage": "管理地址 →",
+      "default": "默认",
+      "empty": "暂无地址",
+      "add": "添加地址"
+    },
+    "subscriptions": {
+      "title": "我的定期订阅",
+      "active": "生效中",
+      "paused": "已暂停",
+      "cancelled": "已取消",
+      "frequency": "每 {{days}} 天配送一次 · 享 {{discount}} 折",
+      "next": "下次发货时间：",
+      "confirm_cancel": "确定要取消此订阅吗？",
+      "cancel_success": "已取消订阅",
+      "cancel_btn": "取消订阅",
+      "empty": "您还没有任何定期订阅计划"
+    },
+    "referrals": {
+      "title": "我的推荐与积分",
+      "partner_center": "合伙人返利中心",
+      "invited_count_label": "当前已邀请：",
+      "invited_unit": "人",
+      "current_rate": "当前返利比例",
+      "max_tier": "已达到最高阶",
+      "super_partner": "超级合伙人 (20%)",
+      "senior_partner": "高级合伙人 (15%)",
+      "super": "超级合伙人",
+      "senior": "高级合伙人",
+      "normal": "普通合伙人",
+      "all_unlocked": "您已解锁所有阶段",
+      "to_next_tier": "距离 {{tier}} 还差 {{count}} 人",
+      "link_title": "专属邀请链接",
+      "copy_success": "邀请链接已复制",
+      "copy": "复制",
+      "desc": "好友通过您的链接注册并购买商品后，您可获得实付金额 10% 的积分奖励！(100积分=1元)",
+      "invited_list": "邀请好友 ({{count}})",
+      "invited_empty": "暂无成功邀请的好友",
+      "history": "积分流水",
+      "history_empty": "暂无积分流水记录"
+    }
+  },
+  "orders": {
+    "title": "我的订单",
+    "tabs": {
+      "all": "全部",
+      "pending": "待付款",
+      "paid": "已付款",
+      "shipped": "已发货",
+      "delivered": "已收货",
+      "cancelled": "已取消"
+    },
+    "confirm_cancel": "确认取消此订单？",
+    "cancel_success": "订单已取消",
+    "loading": "加载中...",
+    "recipient": "收货：",
+    "cancel_btn": "取消订单",
+    "review": "去评价",
+    "empty": "暂无订单记录",
+    "shop": "去选购商品"
+  },
+  "auth": {
+    "login_title": "登录",
+    "login_subtitle": "欢迎回到 TRASOCHY",
+    "email": "邮箱",
+    "password": "密码",
+    "signing_in": "登录中...",
+    "sign_in": "登录",
+    "no_account": "没有账号？",
+    "join_us": "加入我们",
+    "register_title": "创建账号",
+    "register_subtitle": "加入 TRASOCHY 家族",
+    "name": "姓名 *",
+    "phone": "电话",
+    "password_register": "密码 * (至少6位)",
+    "confirm_password": "确认密码 *",
+    "referral": "推荐码 (选填)",
+    "placeholder_referral": "如果您是通过邀请注册",
+    "creating": "创建中...",
+    "create_account": "创建账号",
+    "have_account": "已有账号？"
+  },
+  "checkout": {
+    "title": "结算",
+    "shipping_info": "收货信息",
+    "manage_addresses": "管理地址",
+    "default": "默认",
+    "use_new_address": "使用新地址",
+    "recipient": "收件人 *",
+    "phone": "电话 *",
+    "province": "省份",
+    "city": "城市",
+    "district": "区县",
+    "address_detail": "详细地址 *",
+    "placeholder_province": "如：广东省",
+    "placeholder_city": "如：深圳市",
+    "placeholder_address": "街道、门牌号",
+    "back_to_saved": "← 选择已保存地址",
+    "no_saved_address": "暂无已保存地址，请填写新地址",
+    "remark": "订单备注",
+    "placeholder_remark": "特殊要求...",
+    "is_gift": "这是送给Ta的礼物 (加收 ¥15 包装服务费)",
+    "gift_message": "免费心意卡片留言",
+    "placeholder_gift": "亲爱的，愿你每一天都如这款护肤品般闪耀...",
+    "gift_notice": "我们将为您手写在精美贺卡上并随礼盒一同寄出",
+    "payment_method": "支付方式",
+    "wechat_pay": "微信支付",
+    "alipay": "支付宝",
+    "wechat_browser_notice": "检测到微信浏览器，将使用微信JSAPI支付",
+    "points_redemption_notice": "本次订单将使用积分全额兑换",
+    "points_discount": "积分抵扣",
+    "available_points": "当前可用积分：",
+    "points_exchange_rate": "{{ratio}}积分 = ¥1.00，最多可抵扣 ¥{{max}}",
+    "placeholder_points": "输入使用积分",
+    "free_samples": "0元加购体验装",
+    "selected_samples": "已选 {{count}}/2 件",
+    "sample": "体验装",
+    "summary": "订单汇总",
+    "items_count": "{{count}} 件商品",
+    "subtotal": "商品总额",
+    "gift_fee": "礼品包装费",
+    "points_deducted": "积分抵扣 (-{{points}}积分)",
+    "final_amount": "实付金额",
+    "use_points_label": "使用积分",
+    "points_value": "{{points}} 积分",
+    "processing": "处理中...",
+    "confirm_redemption": "确认兑换",
+    "submit_pay": "提交订单并支付",
+    "no_payment_needed": "全额抵扣，无需支付",
+    "redirect_notice": "提交订单后将跳转至支付页面完成支付"
+  },
+  "cart": {
+    "title": "购物车",
+    "empty": "您的购物车是空的",
+    "browse": "浏览商品",
+    "item": "件商品",
+    "items": "件商品",
+    "summary": "订单摘要",
+    "total": "总计",
+    "checkout": "去结算"
+  },
+  "products": {
+    "sold_out": "已售罄",
+    "low_stock": "库存紧张",
+    "categories": "产品分类",
+    "all": "全部",
+    "bundle": "组合套装",
+    "skin_type": "适用肤质",
+    "concerns": "护肤诉求",
+    "search_results": "搜索 \"{{keyword}}\" — ",
+    "count": "共 {{count}} 件商品",
+    "sort_default": "默认排序",
+    "sort_newest": "最新上架",
+    "sort_price_asc": "价格：由低到高",
+    "sort_price_desc": "价格：由高到低",
+    "no_products": "未找到相关商品"
+  },
+  "skin_type": {
+    "干性": "干性",
+    "油性": "油性",
+    "中性": "中性",
+    "混合性": "混合性",
+    "敏感肌": "敏感肌"
+  },
+  "concern": {
+    "抗老": "抗老",
+    "美白": "美白",
+    "保湿": "保湿",
+    "祛痘": "祛痘",
+    "修护": "修护",
+    "提亮": "提亮",
+    "舒缓": "舒缓"
+  }
+}

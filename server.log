@@ -1,0 +1,7 @@
+◇ injected env (3) from .env // tip: ⌘ suppress logs { quiet: true }
+[DB] Page content settings added
+[DB] Tables created/verified
+[DB] Users table already supports staff level
+[DB] Payment settings added
+[Server] 护肤品商城后端运行在 http://localhost:5173
+[Server] Admin: admin@skincare.com / admin123

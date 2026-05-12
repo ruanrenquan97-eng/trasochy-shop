@@ -1,0 +1,48 @@
+<view class="container">
+  <view class="header">
+    <text class="title">AI 皮肤检测</text>
+    <text class="subtitle">基于旷视 Megvii 技术</text>
+  </view>
+
+  <!-- 拍摄区域 -->
+  <view class="camera-section" wx:if="{{!imageUrl}}">
+    <view class="placeholder">
+      <image src="/images/face-mask.png" class="mask" mode="aspectFit"></image>
+      <text>请将面部对准虚线框内</text>
+    </view>
+    <button class="btn-primary" bindtap="takePhoto">立即拍照测试</button>
+  </view>
+
+  <!-- 结果分析区域 -->
+  <view class="result-section" wx:if="{{imageUrl}}">
+    <image src="{{imageUrl}}" class="preview-image" mode="aspectFill"></image>
+    
+    <view class="loading" wx:if="{{isAnalyzing}}">
+      <text>AI 正在分析您的皮肤数据，请稍候...</text>
+    </view>
+
+    <view class="report" wx:if="{{!isAnalyzing && analysisResult}}">
+      <text class="report-title">您的皮肤分析报告</text>
+      
+      <view class="tags-container">
+        <text class="tag" wx:for="{{concerns}}" wx:key="*this">{{item}}</text>
+      </view>
+
+      <view class="recommendations">
+        <text class="rec-title">为您专属定制的护肤方案</text>
+        <view class="product-list">
+          <view class="product-item" wx:for="{{recommendations}}" wx:key="id" bindtap="goToBuy" data-id="{{item.id}}">
+            <image src="{{item.mainImage || '/images/default-product.png'}}" mode="aspectFill"></image>
+            <view class="product-info">
+              <text class="product-name">{{item.name}}</text>
+              <text class="product-price">¥{{item.basePrice}}</text>
+              <button class="btn-buy">前往官网购买</button>
+            </view>
+          </view>
+        </view>
+      </view>
+      
+      <button class="btn-secondary" bindtap="resetTest">重新测试</button>
+    </view>
+  </view>
+</view>

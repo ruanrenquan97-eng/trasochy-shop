@@ -1,0 +1,184 @@
+/* 基础重置和变量 */
+page {
+  background-color: #f7f9fa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.container {
+  padding: 30rpx;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 50rpx;
+}
+
+.title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #333;
+  display: block;
+  margin-bottom: 10rpx;
+}
+
+.subtitle {
+  font-size: 28rpx;
+  color: #888;
+}
+
+/* 拍摄区域 */
+.camera-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 50rpx;
+}
+
+.placeholder {
+  width: 500rpx;
+  height: 600rpx;
+  border: 2rpx dashed #ccc;
+  border-radius: 20rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 40rpx;
+  background-color: #fff;
+}
+
+.mask {
+  width: 300rpx;
+  height: 400rpx;
+  opacity: 0.3;
+  margin-bottom: 20rpx;
+}
+
+/* 按钮样式 */
+.btn-primary {
+  background-color: #000;
+  color: #fff;
+  width: 80%;
+  border-radius: 40rpx;
+  font-size: 32rpx;
+  padding: 20rpx 0;
+}
+
+.btn-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+  width: 80%;
+  border-radius: 40rpx;
+  font-size: 32rpx;
+  margin-top: 30rpx;
+}
+
+.btn-buy {
+  background-color: #c8a165; /* 奢华金 */
+  color: #fff;
+  font-size: 24rpx;
+  padding: 10rpx 20rpx;
+  border-radius: 30rpx;
+  margin-top: 10rpx;
+}
+
+/* 结果区域 */
+.result-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.preview-image {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 100rpx;
+  margin-bottom: 30rpx;
+  border: 4rpx solid #e0e0e0;
+}
+
+.loading {
+  font-size: 28rpx;
+  color: #666;
+  margin: 40rpx 0;
+}
+
+.report {
+  width: 100%;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.05);
+  box-sizing: border-box;
+}
+
+.report-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+  display: block;
+}
+
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 40rpx;
+}
+
+.tag {
+  background-color: #ffeef0;
+  color: #ff5a79;
+  padding: 10rpx 20rpx;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  margin-right: 15rpx;
+  margin-bottom: 15rpx;
+}
+
+/* 推荐商品列表 */
+.recommendations {
+  margin-top: 20rpx;
+}
+
+.rec-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+  display: block;
+}
+
+.product-item {
+  display: flex;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #eee;
+}
+
+.product-item image {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 10rpx;
+  margin-right: 20rpx;
+  background-color: #f9f9f9;
+}
+
+.product-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.product-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 10rpx;
+}
+
+.product-price {
+  font-size: 32rpx;
+  color: #e53935;
+  font-weight: bold;
+  margin-bottom: 10rpx;
+}

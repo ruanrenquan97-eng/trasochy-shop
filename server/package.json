@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "svg-captcha": "^1.4.0",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0"
+  }
+}
