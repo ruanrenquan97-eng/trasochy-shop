@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="护肤科普：院线级抗衰精华">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7fbf8"/><stop offset="0.55" stop-color="#eef8f5"/><stop offset="1" stop-color="#f9f3ea"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#78d8c6"/></linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="64" y="64" width="1072" height="502" rx="34" fill="#ffffff" opacity="0.76"/>
+  <path d="M770 74C930 104 1091 205 1100 357C1110 529 934 568 786 523C649 481 590 340 637 218C667 140 700 61 770 74Z" fill="#dff4ec" opacity="0.9"/>
+  <path d="M909 143C1005 182 1041 281 1005 369C966 464 842 497 756 433C669 369 682 245 764 180C809 144 855 121 909 143Z" fill="#f7dfc5" opacity="0.68"/>
+  <circle cx="987" cy="211" r="76" fill="#ffffff" opacity="0.54"/>
+  <rect x="84" y="112" width="260" height="10" rx="5" fill="url(#accent)"/>
+  <text x="84" y="152" font-size="22" font-weight="700" fill="#2563eb" letter-spacing="2">TRASOCHY RESEARCH</text>
+  <text x="84" y="178" font-size="48" font-weight="700" fill="#10201b">院线级抗衰精华：不止于贵，而是临界升级</text>
+  <text x="86" y="402" font-size="26" fill="#355049">从化妆品逻辑到皮肤医学逻辑的跃迁</text>
+  <text x="86" y="526" font-size="22" fill="#6c7d77">Skin science article | AI generated</text>
+</svg>
