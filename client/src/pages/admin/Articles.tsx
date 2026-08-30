@@ -15,6 +15,7 @@ export default function AdminArticles() {
   const [langTab, setLangTab] = useState('zh');
   const [editingArticle, setEditingArticle] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
+  const [openGallery, setOpenGallery] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
@@ -110,15 +111,33 @@ export default function AdminArticles() {
     mutationFn: (topic: string) => api.post('/ai/generate-article', { topic }),
     onSuccess: (res: any) => {
       if (res.content) {
-        // 去除开头的标题如果有的话
-        let finalContent = res.content;
-        const titleMatch = res.content.match(/^#\\s+(.+)$/m);
-        if (titleMatch && editingArticle && !editingArticle.title) {
-           setEditingArticle({ ...editingArticle, title: titleMatch[1].trim(), content: finalContent.replace(/^#\\s+(.+)\\n/, '') });
-        } else {
-           setEditingArticle({ ...editingArticle, content: (editingArticle?.content || '') + '\n' + finalContent });
-        }
-        toast.success('AI 生成完毕');
+        const keywordText = Array.isArray(res.keywords) ? res.keywords.join(', ') : (res.keywords || '');
+        setEditingArticle((prev: any) => ({
+          ...prev,
+          title: res.title || prev?.title || '',
+          content: res.content,
+          coverImage: res.coverImage || prev?.coverImage || prev?.cover_image || '',
+          cover_image: res.coverImage || prev?.cover_image || prev?.coverImage || '',
+          keywords: keywordText || prev?.keywords || '',
+          isAiGenerated: true,
+          is_ai_generated: 1,
+          translations: {
+            ...(prev?.translations || {}),
+            en: {
+              ...(prev?.translations?.en || {}),
+              title: res.translations?.en?.title || '',
+              content: res.translations?.en?.content || '',
+              keywords: Array.isArray(res.translations?.en?.keywords) ? res.translations.en.keywords.join(', ') : (res.translations?.en?.keywords || ''),
+            },
+            de: {
+              ...(prev?.translations?.de || {}),
+              title: res.translations?.de?.title || '',
+              content: res.translations?.de?.content || '',
+              keywords: Array.isArray(res.translations?.de?.keywords) ? res.translations.de.keywords.join(', ') : (res.translations?.de?.keywords || ''),
+            },
+          },
+        }));
+        toast.success('AI 已生成文章、封面图和英德翻译');
       }
     },
     onError: (err: any) => toast.error(err.response?.data?.error || '生成失败'),
@@ -336,6 +355,13 @@ export default function AdminArticles() {
                           <button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="px-3 py-1.5 border border-stone-200 text-stone-600 rounded-lg text-xs hover:bg-stone-50 flex items-center gap-1.5">
                             <Upload size={14} /> {uploading ? '上传中...' : '点击上传封面'}
                           </button>
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); setOpenGallery(true); }}
+                            className="px-3 py-1.5 border border-purple-200 text-purple-600 rounded-lg text-xs hover:bg-purple-50 flex items-center gap-1.5 font-medium transition-colors"
+                          >
+                            <Bot size={14} /> 选择 AI 绘图
+                          </button>
                           {(editingArticle.coverImage || editingArticle.cover_image) && (
                             <button onClick={() => setEditingArticle({ ...editingArticle, coverImage: '', cover_image: '' })} className="text-xs text-stone-400 hover:text-rose-500">移除</button>
                           )}
@@ -359,7 +385,7 @@ export default function AdminArticles() {
                     className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors mb-1"
                   >
                     {generateArticleMutation.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Bot size={14} />}
-                    {generateArticleMutation.isPending ? '生成中...' : 'AI 辅助撰写'}
+                    {generateArticleMutation.isPending ? '生成中...' : 'AI 生成文章+封面+翻译'}
                   </button>
                 </div>
                 <div className="border border-stone-200 rounded-xl overflow-hidden bg-white">
@@ -501,6 +527,7 @@ export default function AdminArticles() {
                 ai_article_auto_enabled: fd.get('ai_article_auto_enabled') ? '1' : '0',
                 ai_article_keywords: fd.get('ai_article_keywords'),
                 ai_article_frequency: fd.get('ai_article_frequency'),
+                ai_article_cover_style: fd.get('ai_article_cover_style'),
               };
               saveSettingsMutation.mutate(data);
             }}>
@@ -529,6 +556,14 @@ export default function AdminArticles() {
                         <option value="7">每周 1 篇</option>
                         <option value="30">每月 1 篇</option>
                       </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-stone-700 mb-1">封面图片生成风格</label>
+                      <select name="ai_article_cover_style" defaultValue={settingsData.ai_article_cover_style || 'svg'} className="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+                        <option value="svg">极简设计渐变色板封面 (矢量无损, 100%稳定)</option>
+                        <option value="wanx">通义万相 AI 意境插画与摄影封面 (逼真写实, 智能语义)</option>
+                      </select>
+                      <p className="text-xs text-stone-400 mt-1">若选择 AI 意境封面，系统会根据文章标题和内容智能润色生图提示词，通过阿里云“通义万相 (Wanx)”API生成逼真的高端护肤大片。若生图失败将自动降级为渐变色板，确保稳定。</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-stone-700 mb-1">发文关键词库 (逗号分隔)</label>
@@ -605,6 +640,149 @@ export default function AdminArticles() {
           </div>
         </div>
       )}
+      {/* Dreamina AI Gallery Selector Modal */}
+      <DreaminaGalleryModal
+        isOpen={openGallery}
+        onClose={() => setOpenGallery(false)}
+        onSelect={(url) => {
+          setEditingArticle((prev: any) => ({ ...prev, coverImage: url, cover_image: url }));
+          setOpenGallery(false);
+        }}
+      />
     </div>
   );
 }
+
+interface DreaminaGalleryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelect: (url: string) => void;
+}
+
+function DreaminaGalleryModal({ isOpen, onClose, onSelect }: DreaminaGalleryModalProps) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchTasks = async () => {
+    setLoading(true);
+    try {
+      const res: any = await api.get('/ai/dreamina/tasks');
+      // Filter tasks that generated images successfully
+      const successfulTasks = (res || []).filter(
+        (t: any) => t.status === 'success' && t.result_urls?.length > 0
+      );
+      setTasks(successfulTasks);
+    } catch (e: any) {
+      toast.error('获取即梦素材库失败: ' + (e.message || '网络错误'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchTasks();
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  // Flatten all successfully generated images with their corresponding prompt and metadata
+  const galleryItems = tasks.flatMap(task => 
+    (task.result_urls || []).map((url: string, idx: number) => ({
+      url,
+      prompt: task.prompt,
+      submitId: task.submit_id,
+      index: idx,
+      createdAt: task.created_at,
+      userName: task.user_name || '系统运营'
+    }))
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200" onClick={onClose}>
+      <div 
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col border border-stone-100 animate-in zoom-in-95 duration-200" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+              <Bot size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-stone-800">即梦 AI 绘图素材库</h2>
+              <p className="text-[11px] text-stone-400">选择您在后台利用即梦大模型生成的高端视觉图像</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={fetchTasks} 
+              disabled={loading} 
+              title="刷新素材"
+              className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-500 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-stone-600 transition-colors">✕</button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto flex-1 bg-stone-50/30">
+          {loading ? (
+            <div className="h-64 flex flex-col items-center justify-center gap-3 text-stone-400">
+              <RefreshCw size={24} className="animate-spin text-purple-600" />
+              <span className="text-sm font-medium">正在读取即梦绘图资产...</span>
+            </div>
+          ) : galleryItems.length === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-white rounded-xl border border-dashed border-stone-200">
+              <ImageIcon size={32} className="text-stone-300 mb-2" />
+              <h3 className="text-sm font-bold text-stone-700">暂无 AI 生成素材</h3>
+              <p className="text-xs text-stone-400 mt-1 max-w-xs leading-normal">
+                系统中还没有成功生成的即梦 AI 图像。您可以前往 “AI 大脑系统 - 抖音即梦” 标签页开始您的第一笔创作！
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {galleryItems.map((item, idx) => (
+                <div 
+                  key={idx}
+                  onClick={() => {
+                    onSelect(item.url);
+                  }}
+                  className="bg-white border border-stone-100 rounded-xl overflow-hidden shadow-xs hover:shadow-md hover:border-purple-300 group cursor-pointer transition-all duration-200 aspect-square flex flex-col relative"
+                >
+                  {/* Image container */}
+                  <div className="flex-1 overflow-hidden bg-stone-50 relative flex items-center justify-center">
+                    <img 
+                      src={item.url} 
+                      alt={item.prompt} 
+                      className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">点击选择</span>
+                    </div>
+                  </div>
+
+                  {/* Info overlay/bottom sheet */}
+                  <div className="p-2 border-t border-stone-100 bg-white shrink-0">
+                    <p className="text-[10px] text-stone-700 font-medium line-clamp-2 leading-snug" title={item.prompt}>
+                      {item.prompt}
+                    </p>
+                    <div className="flex justify-between items-center mt-1.5 text-[9px] text-stone-400">
+                      <span>{item.userName}</span>
+                      <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

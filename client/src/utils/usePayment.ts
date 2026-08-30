@@ -61,6 +61,12 @@ export function callWechatJSAPI(params: {
  * 提交支付宝表单（创建隐藏iframe/表单跳转）
  */
 export function submitAlipayForm(formHtml: string) {
+  // 如果直接返回了完整的跳转 URL
+  if (formHtml.startsWith('http://') || formHtml.startsWith('https://')) {
+    window.location.href = formHtml;
+    return;
+  }
+
   // 创建一个临时div来解析表单HTML
   const div = document.createElement('div');
   div.innerHTML = formHtml;

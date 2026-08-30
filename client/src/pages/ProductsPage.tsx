@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
 import { useAuthStore } from '../contexts/authStore';
 import type { Product, Category } from '../types';
-import { Filter, Sparkles, Droplets } from 'lucide-react';
+import { Filter, Sparkles, Droplets, FlaskConical, ShoppingBag } from 'lucide-react';
 import { useTranslation } from "react-i18next";
 
 
@@ -37,7 +37,25 @@ export default function ProductsPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
-  const [page, setPage] = useState(1);
+  const experimentPath = sessionStorage.getItem('experiment_path') || localStorage.getItem('experiment_path') || 'traditional_search';
+  
+  const page = parseInt(searchParams.get('page') || '1', 10);
+  const setPage = (p: number) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('page', String(p));
+      return next;
+    });
+  };
+
+  // Save scroll position when user scrolls
+  useEffect(() => {
+    const handleScroll = () => {
+      sessionStorage.setItem('products_page_scroll_y', String(window.scrollY));
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const { data: dbSkinTypes } = useQuery({
     queryKey: ['public-skin-types'],
@@ -75,6 +93,21 @@ export default function ProductsPage() {
     },
   }) as any;
 
+  // Restore scroll position after products data is loaded
+  useEffect(() => {
+    if (!isLoading && productsData) {
+      const savedScrollY = sessionStorage.getItem('products_page_scroll_y');
+      if (savedScrollY) {
+        const timer = setTimeout(() => {
+          window.scrollTo(0, parseInt(savedScrollY, 10));
+          // Clear position so subsequent user changes (like filters/next page) don't trigger scroll back
+          sessionStorage.removeItem('products_page_scroll_y');
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoading, productsData]);
+
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.get('/products/categories/list'),
@@ -92,7 +125,7 @@ export default function ProductsPage() {
           </h3>
           <div className="flex flex-col gap-1">
             <button
-              onClick={() => { setSearchParams({}); setPage(1); }}
+              onClick={() => { setSearchParams({ page: '1' }); }}
               className={`text-xs px-3 py-2.5 text-left tracking-wider uppercase transition-colors ${!category ? 'bg-stone-900 text-white' : 'text-stone-500 hover:text-stone-900'}`}
             >
               {t('products.all', 'All')}
@@ -100,14 +133,14 @@ export default function ProductsPage() {
             {categories?.map((cat: Category) => (
               <button
                 key={cat.slug}
-                onClick={() => { setSearchParams({ category: cat.slug }); setPage(1); }}
+                onClick={() => { setSearchParams({ category: cat.slug, page: '1' }); }}
                 className={`text-xs px-3 py-2.5 text-left tracking-wider uppercase transition-colors ${category === cat.slug ? 'bg-stone-900 text-white' : 'text-stone-500 hover:text-stone-900'}`}
               >
                 {cat.name}
               </button>
             ))}
             <button
-              onClick={() => { setSearchParams({ bundle: '1' }); setPage(1); }}
+              onClick={() => { setSearchParams({ bundle: '1', page: '1' }); }}
               className={`text-xs px-3 py-2.5 text-left tracking-wider uppercase transition-colors ${isBundle === '1' ? 'bg-stone-900 text-white' : 'text-stone-500 hover:text-stone-900'}`}
             >
               {t('products.bundle', t('auto_homepage_165', '组合套装'))}
@@ -126,8 +159,8 @@ export default function ProductsPage() {
                     onClick={() => {
                       const p = new URLSearchParams(searchParams);
                       if (skinType === type.original_name) p.delete('skinType'); else p.set('skinType', type.original_name);
+                      p.set('page', '1');
                       setSearchParams(p);
-                      setPage(1);
                     }}
                     className={`text-xs px-3 py-1.5 border rounded-full transition-colors ${skinType === type.original_name ? 'bg-stone-900 text-white border-stone-900' : 'text-stone-600 border-stone-200 hover:border-stone-400'}`}
                   >
@@ -146,8 +179,8 @@ export default function ProductsPage() {
                     onClick={() => {
                       const p = new URLSearchParams(searchParams);
                       if (concern === type.original_name) p.delete('concern'); else p.set('concern', type.original_name);
+                      p.set('page', '1');
                       setSearchParams(p);
-                      setPage(1);
                     }}
                     className={`text-xs px-3 py-1.5 border rounded-full transition-colors ${concern === type.original_name ? 'bg-stone-900 text-white border-stone-900' : 'text-stone-600 border-stone-200 hover:border-stone-400'}`}
                   >
@@ -161,6 +194,48 @@ export default function ProductsPage() {
 
         {/* 主内容 */}
         <div>
+          {/* 决策疲劳辅助入口 / 学术实验选品指引 */}
+          {experimentPath === 'traditional_search' ? (
+            <div className="mb-6 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <FlaskConical size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-stone-900">【学术实验任务】自主挑选 2~3 款产品</h4>
+                  <p className="text-[11px] text-stone-600 mt-0.5">请自主浏览商品，挑选 2~3 款心仪产品加入购物车；选好后点击完成问卷调查</p>
+                </div>
+              </div>
+              <Link
+                to="/cart"
+                className="w-full sm:w-auto px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-medium transition-all text-center shrink-0 shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <span>查看购物车</span>
+                <ShoppingBag size={13} className="text-emerald-300" />
+              </Link>
+            </div>
+          ) : settings?.feature_ai_quiz === '1' ? (
+            <div className="mb-6 bg-gradient-to-r from-rose-50/70 via-orange-50/50 to-amber-50/60 border border-rose-100 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center shrink-0">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-stone-900">感到产品较多、难以抉择？</h4>
+                  <p className="text-[11px] text-stone-500 mt-0.5">点击让 AI 针对您的肤质和护肤需求，量身定制专属产品组合</p>
+                </div>
+              </div>
+              <Link
+                to="/quiz"
+                onClick={() => sessionStorage.setItem('experiment_path', 'ai_assisted')}
+                className="w-full sm:w-auto px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-medium transition-all text-center shrink-0 shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <span>我需要 AI 帮助</span>
+                <Sparkles size={13} className="text-rose-400" />
+              </Link>
+            </div>
+          ) : null}
+
           {/* 工具栏 */}
           <div className="flex items-center justify-between mb-8 pb-4 border-b border-stone-200">
             <div className="text-xs text-stone-400 tracking-wider uppercase">
@@ -169,7 +244,7 @@ export default function ProductsPage() {
             </div>
             <select
               value={sort}
-              onChange={e => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('sort', e.target.value); return p; })}
+              onChange={e => setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('sort', e.target.value); p.set('page', '1'); return p; })}
               className="text-xs border border-stone-300 px-3 py-2 focus:outline-none focus:border-stone-900 tracking-wider uppercase bg-white"
             >
               <option value="sort_order">{t('products.sort_default', 'Default')}</option>

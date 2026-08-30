@@ -26,7 +26,7 @@ router.get('/', (req: Request, res: Response) => {
   }
 
   const articles = sqlite.prepare(`
-    SELECT id, title, slug, cover_image, is_ai_generated, keywords, published_at, created_at, updated_at
+    SELECT id, title, slug, cover_image, is_ai_generated, keywords, translations, published_at, created_at, updated_at
     FROM articles 
     WHERE ${where} 
     ORDER BY COALESCE(published_at, created_at) DESC 

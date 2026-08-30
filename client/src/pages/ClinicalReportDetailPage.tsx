@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, ArrowLeft, Calendar, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 export default function ClinicalReportDetailPage() {
   const { slug } = useParams();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const { data: report, isLoading, error } = useQuery({
     queryKey: ['clinical-report', slug],
@@ -36,9 +37,9 @@ export default function ClinicalReportDetailPage() {
       <div className="min-h-screen pt-24 flex flex-col items-center justify-center text-stone-500">
         <FileText size={48} className="mb-4 text-stone-300" />
         <p className="text-lg">报告未找到或已下线</p>
-        <Link to="/articles" className="mt-4 px-6 py-2 bg-stone-900 text-white rounded-full hover:bg-stone-800 transition-colors">
+        <button onClick={() => navigate(-1)} className="mt-4 px-6 py-2 bg-stone-900 text-white rounded-full hover:bg-stone-800 transition-colors">
           返回研究院
-        </Link>
+        </button>
       </div>
     );
   }
@@ -48,10 +49,10 @@ export default function ClinicalReportDetailPage() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* 返回按钮 */}
-        <Link to="/articles" className="inline-flex items-center text-sm text-stone-500 hover:text-stone-900 mb-8 group transition-colors">
+        <button onClick={() => navigate(-1)} className="inline-flex items-center text-sm text-stone-500 hover:text-stone-900 mb-8 group transition-colors">
           <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
           返回列表
-        </Link>
+        </button>
 
         {/* 报告头部 */}
         <div className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden mb-8">
@@ -116,6 +117,13 @@ export default function ClinicalReportDetailPage() {
             <ProtectedPDFViewer url={report.pdf_url} />
           </div>
         )}
+
+        {/* 临床与功效合规免责声明 */}
+        <div className="mt-8 bg-stone-100/80 rounded-2xl p-5 text-center border border-stone-200/60">
+          <p className="text-[11px] text-stone-500 leading-relaxed max-w-2xl mx-auto">
+            【人体功效评价与实验数据合规说明】本报告展示的数据系实验室或第三方检测机构在限定受试人群、测试周期及特定环境条件下测得的研究结果，仅供科研探讨与技术交流。受个人肤质差异、使用方法及外部环境影响，实际护肤体验因人而异。化妆品非药品，不具备疾病预防或治疗功能。
+          </p>
+        </div>
       </div>
     </div>
   );

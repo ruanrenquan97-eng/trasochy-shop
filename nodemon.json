@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "server/src"
+  ],
+  "ext": "ts,json",
+  "ignore": [
+    "client/**/*",
+    "data/**/*",
+    "uploads/**/*",
+    "node_modules/**/*",
+    "*.log"
+  ]
+}

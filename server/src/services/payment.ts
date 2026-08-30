@@ -113,12 +113,21 @@ export async function createPayment(params: CreatePaymentParams): Promise<Create
 
   // 5. 支付宝
   if (params.channel === 'alipay') {
-    const formHtml = await Alipay.createWapOrder({
-      orderNo: params.orderNo,
-      amount: order.pay_amount,
-      subject: `传诗奇订单-${params.orderNo}`,
-      returnUrl: params.returnUrl,
-    });
+    const isMobile = /Mobile|Android|iPhone|iPad/i.test(params.userAgent || '');
+    const formHtml = isMobile
+      ? await Alipay.createWapOrder({
+          orderNo: params.orderNo,
+          amount: order.pay_amount,
+          subject: `传诗奇订单-${params.orderNo}`,
+          returnUrl: params.returnUrl,
+        })
+      : await Alipay.createPageOrder({
+          orderNo: params.orderNo,
+          amount: order.pay_amount,
+          subject: `传诗奇订单-${params.orderNo}`,
+          returnUrl: params.returnUrl,
+        });
+
     return {
       type: 'form',
       data: formHtml,
@@ -392,7 +401,7 @@ export async function refundPayment(
   if (!order) {
     return { success: false, refundNo: '', message: '订单不存在' };
   }
-  if (!['paid', 'processing', 'shipped'].includes(order.status)) {
+  if (!['paid', 'processing', 'shipped', 'delivered', 'refund_requested'].includes(order.status)) {
     return { success: false, refundNo: '', message: '该订单状态不允许退款' };
   }
 
@@ -402,34 +411,53 @@ export async function refundPayment(
 
   let refundResult = false;
 
-  if (mode === 'mock') {
-    // Mock模式直接成功
+  const isMockOrder = !order.trade_no || order.trade_no.startsWith('MOCK_') || order.trade_no.toLowerCase().includes('mock');
+
+  if (mode === 'mock' || isMockOrder) {
+    // Mock模式 或 模拟支付的订单直接成功
+    console.log(`[Payment] 订单 ${orderNo} 为模拟支付订单 (trade_no: ${order.trade_no})，退款走Mock成功逻辑`);
     refundResult = true;
   } else if (order.pay_method === 'wechat') {
-    const result = await WechatPay.createRefund({
-      orderNo,
-      refundNo,
-      totalAmount: order.pay_amount,
-      refundAmount: order.pay_amount,
-      reason: refundReason,
-    });
-    refundResult = !!result;
+    if (!WechatPay.isWechatPayConfigured()) {
+      console.log('[Payment] 微信支付未配置，退款自动降级为Mock成功');
+      refundResult = true;
+    } else {
+      const result = await WechatPay.createRefund({
+        orderNo,
+        refundNo,
+        totalAmount: order.pay_amount,
+        refundAmount: order.pay_amount,
+        reason: refundReason,
+      });
+      refundResult = !!result;
+    }
   } else if (order.pay_method === 'alipay') {
-    const result = await Alipay.createRefund({
-      orderNo,
-      refundNo,
-      refundAmount: order.pay_amount,
-      reason: refundReason,
-    });
-    refundResult = !!result;
+    if (!Alipay.isAlipayConfigured()) {
+      console.log('[Payment] 支付宝支付未配置，退款自动降级为Mock成功');
+      refundResult = true;
+    } else {
+      const result = await Alipay.createRefund({
+        orderNo,
+        refundNo,
+        refundAmount: order.pay_amount,
+        reason: refundReason,
+      });
+      refundResult = !!result;
+    }
   } else if (order.pay_method === 'visa') {
-    const result = await StripePay.createRefund({
-      orderNo,
-      refundNo,
-      refundAmount: order.pay_amount,
-      reason: refundReason,
-    });
-    refundResult = !!result;
+    const stripeSecret = process.env.STRIPE_SECRET_KEY || '';
+    if (!stripeSecret || stripeSecret === 'sk_test_mock') {
+      console.log('[Payment] Stripe支付未配置，退款自动降级为Mock成功');
+      refundResult = true;
+    } else {
+      const result = await StripePay.createRefund({
+        orderNo,
+        refundNo,
+        refundAmount: order.pay_amount,
+        reason: refundReason,
+      });
+      refundResult = !!result;
+    }
   }
 
   if (refundResult) {

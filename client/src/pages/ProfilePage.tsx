@@ -92,7 +92,12 @@ export default function ProfilePage() {
             {user.name.slice(0, 1)}
           </div>
           <h2 className="font-semibold text-stone-700">{user.name}</h2>
-          <p className="text-xs text-stone-400 mb-3">{user.email}</p>
+          {/* 用户名（新用户）或邮箱（老用户）显示在昵称下方 */}
+          {(user as any).username ? (
+            <p className="text-xs text-stone-400 mb-3 font-mono tracking-wide">@{(user as any).username}</p>
+          ) : user.email ? (
+            <p className="text-xs text-stone-400 mb-3">{user.email}</p>
+          ) : null}
           <span className={`text-sm px-3 py-1 rounded-full font-medium ${LEVEL_COLORS[user.level]}`}>
             <Crown size={12} className="inline mr-1" />{t(`profile.levels.${user.level}`, LEVEL_LABELS[user.level])}
           </span>

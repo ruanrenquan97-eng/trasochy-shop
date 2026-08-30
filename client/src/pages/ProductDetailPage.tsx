@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { ShoppingCart, Plus, Minus, ArrowLeft, Heart, Star, Send } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, ArrowLeft, Heart, Star, Send, ChevronLeft, ChevronRight, ArrowUp, Headset, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { useAuthStore } from '../contexts/authStore';
@@ -39,6 +39,8 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const [isFavorited, setIsFavorited] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewContent, setReviewContent] = useState('');
@@ -179,6 +181,38 @@ export default function ProductDetailPage() {
 
   const images = [product.main_image, ...(product.images || [])].filter(Boolean);
 
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe) {
+      setActiveImg((prev) => (prev + 1) % images.length);
+    } else if (isRightSwipe) {
+      setActiveImg((prev) => (prev - 1 + images.length) % images.length);
+    }
+  };
+
+  const handlePrevImage = () => {
+    setActiveImg((prev) => (prev - 1 + images.length) % images.length);
+  };
+
+  const handleNextImage = () => {
+    setActiveImg((prev) => (prev + 1) % images.length);
+  };
+
   // GEO: 生成商品结构化数据
   const productSchema = {
     "@context": "https://schema.org",
@@ -256,11 +290,51 @@ export default function ProductDetailPage() {
       <div className="grid md:grid-cols-2 gap-12 lg:gap-20">
         {/* 商品图片 */}
         <div className="space-y-4">
-          <div className="aspect-[3/4] bg-stone-50 overflow-hidden">
+          <div className="relative aspect-[3/4] bg-stone-50 overflow-hidden group rounded-xl">
             {images[activeImg] ? (
-              <img src={images[activeImg]} alt={product.name} className="w-full h-full object-cover" />
+              <img 
+                src={images[activeImg]} 
+                alt={product.name} 
+                className="w-full h-full object-cover select-none transition-all duration-300"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                draggable="false"
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-stone-200 text-7xl">◆</div>
+            )}
+
+            {/* Slide Arrows for desktop/mobile */}
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrevImage}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-stone-800 flex items-center justify-center shadow-md transition-all duration-200 opacity-0 group-hover:opacity-100 md:opacity-0 focus:opacity-100"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  onClick={handleNextImage}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-stone-800 flex items-center justify-center shadow-md transition-all duration-200 opacity-0 group-hover:opacity-100 md:opacity-0 focus:opacity-100"
+                  aria-label="Next image"
+                >
+                  <ChevronRight size={18} />
+                </button>
+
+                {/* Mobile/Desktop slide indicator (dot pagination overlay) */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10 bg-black/25 px-2.5 py-1 rounded-full backdrop-blur-[2px]">
+                  {images.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveImg(i)}
+                      className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeImg ? 'bg-white w-3' : 'bg-white/50'}`}
+                      aria-label={`Go to slide ${i + 1}`}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </div>
           {images.length > 1 && (
@@ -458,6 +532,23 @@ export default function ProductDetailPage() {
 
               {/* 操作按钮 */}
               <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    const event = new CustomEvent('open-ai-chat', { 
+                      detail: { 
+                        productName: product.name, 
+                        productSlug: product.slug 
+                      } 
+                    });
+                    window.dispatchEvent(event);
+                  }}
+                  className="flex flex-col items-center justify-center border border-stone-200 hover:border-stone-450 text-stone-500 hover:text-stone-900 transition-colors w-14 h-[46px] shrink-0 bg-white cursor-pointer"
+                  title="咨询客服"
+                >
+                  <Headset size={18} />
+                  <span className="text-[10px] scale-90 mt-0.5 font-medium">客服</span>
+                </button>
+
                 {purchaseMode === 'one-time' ? (
                   <>
                     <button onClick={handleAddToCart} disabled={adding}
@@ -465,7 +556,7 @@ export default function ProductDetailPage() {
                       <ShoppingCart size={16} />
                       {adding ? t('auto_productdetailpage_241', '添加中...') : t('auto_productdetailpage_242', '加入购物车')}
                     </button>
-                    <button onClick={async () => { await handleAddToCart(); navigate('/cart'); }}
+                    <button onClick={async () => { await handleAddToCart(); navigate('/checkout', { state: { preSelectProductId: product.id } }); }}
                       className="flex-1 btn-outline">
                       {t('auto_productdetailpage_210', '立即购买')}
                     </button>
@@ -571,8 +662,21 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
+      {/* 化妆品合规免责声明与使用提示 */}
+      <div className="mt-12 bg-stone-50 border border-stone-200/80 rounded-2xl p-5 text-xs text-stone-500 leading-relaxed space-y-2">
+        <p className="font-semibold text-stone-800 flex items-center gap-1.5 text-xs">
+          <ShieldAlert size={15} className="text-amber-600" />
+          【合规声明与使用提示】
+        </p>
+        <div className="space-y-1 text-[11px] text-stone-600">
+          <p>• <b>化妆品性质声明</b>：本商品为日常护肤化妆品，非药品，不具备疾病预防、治疗或医疗作用，不得用于医疗用途。</p>
+          <p>• <b>功效体验差异</b>：页面展示的成分说明及实验参考数据均源于原料文献或检测资料，实际护肤体验因个体肤质、环境及使用习惯而异。</p>
+          <p>• <b>敏感性建议</b>：初次使用新护肤品前，建议在耳后或手腕内侧进行局部皮肤测试，如有不适请立即停用并咨询专业医师。</p>
+        </div>
+      </div>
+
       {/* 商品评价区域 */}
-      <div className="mt-20 border-t border-stone-200 pt-12">
+      <div className="mt-14 border-t border-stone-200 pt-12">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <p className="text-xs text-stone-400 tracking-[0.3em] uppercase">{t('auto_productdetailpage_218', t('auto_productdetailpage_218', '用户评价'))}</p>
@@ -705,6 +809,7 @@ export default function ProductDetailPage() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

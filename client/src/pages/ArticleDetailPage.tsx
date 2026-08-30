@@ -33,7 +33,7 @@ const mdToHtml = (md: string) => {
 };
 
 export default function ArticleDetailPage() {
-    const { t } = useTranslation();
+  const { t } = useTranslation();
   const { slug } = useParams();
   const navigate = useNavigate();
 
@@ -49,8 +49,8 @@ export default function ArticleDetailPage() {
     return (
       <div className="text-center py-32">
         <h2 className="text-2xl font-light text-stone-900 mb-4">{t('auto_articledetailpage_59', t('auto_articledetailpage_59', '文章未找到'))}</h2>
-        <button onClick={() => navigate('/articles')} className="text-sm text-stone-500 hover:text-stone-900 underline underline-offset-4">
-          {t('auto_articledetailpage_60', '返回皮肤医学研究院')}
+        <button onClick={() => navigate(-1)} className="text-sm text-stone-500 hover:text-stone-900 underline underline-offset-4">
+          {t('auto_articledetailpage_60', '返回皮肤科学研创中心')}
         </button>
       </div>
     );
@@ -67,7 +67,7 @@ export default function ArticleDetailPage() {
     "datePublished": new Date(article.published_at || article.created_at).toISOString(),
     "author": {
       "@type": "Organization",
-      "name": "TRASOCHY 皮肤医学研究院"
+      "name": t('auto_shoplayout_345', '皮肤科学研创中心')
     },
     "publisher": {
       "@type": "Organization",
@@ -94,7 +94,7 @@ export default function ArticleDetailPage() {
         </script>
       </Helmet>
 
-      <button onClick={() => navigate('/articles')} className="flex items-center gap-2 text-xs text-stone-400 hover:text-stone-900 transition-colors uppercase tracking-widest mb-12">
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-xs text-stone-400 hover:text-stone-900 transition-colors uppercase tracking-widest mb-12">
         <ArrowLeft size={14} /> {t('auto_productdetailpage_196', '返回')}
       </button>
 
@@ -112,7 +112,7 @@ export default function ArticleDetailPage() {
         <div className="text-sm text-stone-400 flex items-center justify-center gap-4">
           <span>{new Date(article.published_at || article.created_at).toLocaleDateString()}</span>
           <span className="w-1 h-1 rounded-full bg-stone-300"></span>
-          <span>{article.is_ai_generated ? 'TRASOCHY科研助理' : 'TRASOCHY'}</span>
+          <span>{article.is_ai_generated ? t('articles.ai_author', 'TRASOCHY科研助理') : 'TRASOCHY'}</span>
         </div>
       </header>
 
@@ -127,7 +127,10 @@ export default function ArticleDetailPage() {
         dangerouslySetInnerHTML={{ __html: htmlContent }}
       />
       
-      <div className="mt-24 pt-12 border-t border-stone-200 text-center">
+      <div className="mt-20 pt-10 border-t border-stone-200 text-center">
+        <p className="text-[11px] text-stone-400 max-w-xl mx-auto leading-relaxed mb-8">
+          【科普与合规声明】本文章属于护肤科学常识与原料机理科普，仅供日常护肤交流与参考。文中所述实验或原料特性不作为针对具体个体的效果承诺。化妆品非药品，不能代替药物治疗皮肤疾病。
+        </p>
         <p className="text-sm text-stone-500 italic mb-6">{t('auto_articledetailpage_62', t('auto_articledetailpage_62', '想要了解更多护肤奥秘？'))}</p>
         <Link to="/products" className="btn-primary px-8 py-3 text-sm">
           {t('auto_articledetailpage_63', '探索全系产品')}

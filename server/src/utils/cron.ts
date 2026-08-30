@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import { sqlite } from '../db';
 import fs from 'fs';
 import path from 'path';
+import { createArticleCoverImage } from './imageGenerator';
+import { DreaminaService } from '../services/dreaminaService';
 
 export function initCronJobs() {
   // 每周一凌晨 2:00 生成报告
@@ -30,6 +32,15 @@ export function initCronJobs() {
       await checkPromoExpiration();
     } catch (err) {
       console.error('[Cron] Failed to check promo expiration:', err);
+    }
+  });
+
+  // 每 10 秒查询一次即梦异步任务的状态
+  cron.schedule('*/10 * * * * *', async () => {
+    try {
+      await pollDreaminaTasks();
+    } catch (err) {
+      console.error('[Cron] Failed to poll Dreamina tasks:', err);
     }
   });
 }
@@ -184,10 +195,21 @@ export async function generateAndSaveArticle() {
   const slug = `auto-ai-${Date.now()}`;
   const now = Date.now();
 
+  // Generate beautiful custom cover image
+  const coverStyle = getSetting('ai_article_cover_style') || 'svg';
+  const coverImage = await createArticleCoverImage({
+    title,
+    subtitle: randomKeyword,
+    keywords: [randomKeyword],
+    content,
+    coverStyle,
+    apiKey,
+  });
+
   sqlite.prepare(`
-    INSERT INTO articles (title, slug, content, status, is_ai_generated, keywords, published_at, created_at, updated_at)
-    VALUES (?, ?, ?, 'published', 1, ?, ?, ?, ?)
-  `).run(title, slug, content, JSON.stringify([randomKeyword]), now, now, now);
+    INSERT INTO articles (title, slug, content, cover_image, status, is_ai_generated, keywords, published_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'published', 1, ?, ?, ?, ?)
+  `).run(title, slug, content, coverImage, JSON.stringify([randomKeyword]), now, now, now);
 
   console.log('[Cron] Successfully generated and saved AI article for keyword:', randomKeyword);
 }
@@ -204,23 +226,45 @@ export async function generateAndSaveReport() {
     throw new Error('No DashScope API Key configured.');
   }
 
-  // 1. 获取近期行为数据
+  // 1. 获取近期全站行为数据
   const behaviorData = sqlite.prepare(`
-    SELECT b.action_type, b.path, p.name as product_name, p.base_price, SUM(b.dwell_time) as total_dwell, COUNT(*) as action_count
+    SELECT b.action_type, b.path, p.name as product_name, p.price as base_price, SUM(b.dwell_time) as total_dwell, COUNT(*) as action_count
     FROM user_behavior_logs b
     LEFT JOIN products p ON b.product_id = p.id OR b.path = ('/products/' || p.slug)
-    GROUP BY b.action_type, b.path, p.name, p.base_price
+    GROUP BY b.action_type, b.path, p.name, p.price
     ORDER BY action_count DESC, total_dwell DESC
     LIMIT 50
   `).all() as any[];
 
-  if (!behaviorData || behaviorData.length === 0) {
+  // 1.1 获取专门针对商品的停留时长排行榜（Product Dwell Time）
+  const productDwellData = sqlite.prepare(`
+    SELECT 
+      p.name as product_name,
+      p.price as product_price,
+      p.category_name,
+      COUNT(DISTINCT b.session_id) as unique_visitors,
+      COUNT(*) as view_count,
+      SUM(b.dwell_time) as total_dwell_seconds,
+      ROUND(AVG(b.dwell_time), 1) as avg_dwell_seconds
+    FROM user_behavior_logs b
+    JOIN products p ON b.product_id = p.id OR b.path = ('/products/' || p.slug)
+    WHERE b.action_type = 'page_view'
+    GROUP BY p.id, p.name, p.price, p.category_name
+    ORDER BY total_dwell_seconds DESC
+    LIMIT 20
+  `).all() as any[];
+
+  if ((!behaviorData || behaviorData.length === 0) && (!productDwellData || productDwellData.length === 0)) {
     console.log('[Cron] No behavior data to analyze. Skipping report generation.');
     return;
   }
 
   // 2. 将数据格式化为文本
-  const dataStr = behaviorData.map(d => {
+  const productDwellStr = productDwellData.map((d, i) => {
+    return `${i + 1}. 商品:【${d.product_name}】(分类:${d.category_name || '未分类'}, 售价:￥${d.product_price}) | 累计停留: ${d.total_dwell_seconds}秒, 平均每次停留: ${d.avg_dwell_seconds}秒, 浏览次数: ${d.view_count}次, 独立访客: ${d.unique_visitors}人`;
+  }).join('\n');
+
+  const generalDataStr = behaviorData.map(d => {
     let line = `- 操作: ${d.action_type}, 路径: ${d.path}, 次数: ${d.action_count}, 总停留: ${d.total_dwell || 0}秒`;
     if (d.product_name) {
       line += `, 商品: ${d.product_name} (￥${d.base_price})`;
@@ -229,8 +273,28 @@ export async function generateAndSaveReport() {
   }).join('\n');
 
   // 3. 构建 Prompt
-  const systemPrompt = `你是一位名为 TRASOCHY AI 的首席电商运营总监。你的任务是根据给定的近期网站访客行为数据，进行深度的商业洞察分析，并输出一份排版清晰、具有实操性的《AI 智能运营与推广策略报告》。`;
-  const userPrompt = `以下是商城近期的前端埋点行为数据统计：\n\n${dataStr}\n\n请分析这些数据，并输出一份 Markdown 格式的报告，包含以下两部分内容：\n1. 【产品配置建议】：指出哪些产品浏览量高但可能转化低，哪些产品可以组合打包成套装，哪些产品可以作为体验装赠送。\n2. 【营销推广建议】：建议采用何种弹窗、公告、或积分折扣策略来提升整体转化率。\n\n请保持客观、专业，并在可能的情况下给出具体的定价或营销数值建议。`;
+  const systemPrompt = `你是一位名为 TRASOCHY AI 的首席电商运营总监。你的任务是根据给定的近期网站访客行为数据（尤其是客户在具体商品详情页的停留时长、跳出情况及浏览频次），进行深度的商业洞察分析，并输出一份排版专业、数据详实、具有可实操性的《AI 智能运营与商品推广策略报告》。`;
+  
+  const userPrompt = `以下是商城系统采集到的真实用户行为埋点与【商品页面客户停留时长数据】：
+
+【重点：客户进入各产品页面的停留时间与关注度排行】
+${productDwellStr || '（近期暂无单品停留数据）'}
+
+【全站路径与交互行为概览】
+${generalDataStr}
+
+请作为首席运营总监，深度分析以上客户停留数据，输出一份专业的 Markdown 策略报告，需包含以下模块：
+1. 【商品停留时长与客户兴趣洞察】：
+   - 重点剖析哪些商品客户停留时间最长（高兴趣高粘性），分析其吸引客户的可能原因；
+   - 重点指出哪些商品虽然有浏览但平均停留很短（流失风险高），给出首屏视觉或文案改善建议；
+   - 指出“高停留时长但缺乏加购转化”的潜在瓶颈（如定价疑虑、缺乏信任背书、功效说明不详）。
+2. 【商品运营与组合定价方案】：
+   - 针对高停留热度单品，建议如何搭配连带销售（如打包成「抗老组合」或「修护套装」）；
+   - 针对长停留商品，给出具体的价格锚点、限时优惠券或满赠小样策略。
+3. 【全站转化提升与营销实操行动计划】：
+   - 针对非AI组与AI组用户群，建议采用何种弹窗引导、测肤推荐或社群私域转化手段。
+
+请保持客观、专业，并在可能的情况下给出具体的定价数字、券额（如满300减40）与排期建议。`;
 
   // 4. 调用 API
   const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
@@ -280,4 +344,48 @@ export async function generateAndSaveReport() {
   console.log(`[Cron] Cleaned up ${result.changes} old behavior records.`);
   
   return report;
+}
+
+export async function pollDreaminaTasks() {
+  try {
+    // 查找所有正在生成中（querying）的任务
+    const pendingTasks = sqlite.prepare(`
+      SELECT submit_id FROM dreamina_tasks WHERE status = 'querying'
+    `).all() as any[];
+
+    if (!pendingTasks || pendingTasks.length === 0) return;
+
+    console.log(`[Cron] Found ${pendingTasks.length} pending Dreamina tasks. Polling status...`);
+
+    const downloadDir = path.join(process.cwd(), 'uploads', 'dreamina');
+
+    for (const task of pendingTasks) {
+      const submitId = task.submit_id;
+      try {
+        const result = await DreaminaService.queryResult(submitId, downloadDir);
+        
+        if (result.status === 'success') {
+          const now = Date.now();
+          sqlite.prepare(`
+            UPDATE dreamina_tasks 
+            SET status = 'success', result_urls = ?, updated_at = ? 
+            WHERE submit_id = ?
+          `).run(JSON.stringify(result.resultUrls || []), now, submitId);
+          console.log(`[Cron] Dreamina task ${submitId} completed successfully! Files:`, result.resultUrls);
+        } else if (result.status === 'fail') {
+          const now = Date.now();
+          sqlite.prepare(`
+            UPDATE dreamina_tasks 
+            SET status = 'fail', fail_reason = ?, updated_at = ? 
+            WHERE submit_id = ?
+          `).run(result.failReason || 'Unknown error', now, submitId);
+          console.log(`[Cron] Dreamina task ${submitId} failed. Reason:`, result.failReason);
+        }
+      } catch (err: any) {
+        console.error(`[Cron] Failed to poll status for Dreamina task ${submitId}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error('[Cron] Dreamina polling error:', err.message);
+  }
 }

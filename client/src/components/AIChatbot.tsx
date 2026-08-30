@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot, User, Loader2 } from 'lucide-react';
 import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import api from '../utils/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -8,14 +12,150 @@ interface Message {
 }
 
 export const AIChatbot: React.FC = () => {
-    const { t } = useTranslation();
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: t('auto_aichatbot_326', '您好！我是 TRASOCHY 专属护肤顾问。请问有什么我可以帮您的？') }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [productMap, setProductMap] = useState<Record<string, { id: number; name: string; price: number; mainImage: string }>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      api.get('/products?limit=1000')
+        .then((res: any) => {
+          const products = res.products || res || [];
+          const mapping: Record<string, { id: number; name: string; price: number; mainImage: string }> = {};
+          products.forEach((p: any) => {
+            mapping[p.slug] = { id: p.id, name: p.name, price: p.basePrice || p.base_price, mainImage: p.mainImage || p.main_image };
+          });
+          setProductMap(mapping);
+        })
+        .catch(err => console.error('Failed to load products mapping:', err));
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleOpenChat = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { productName, productSlug } = customEvent.detail || {};
+      if (productName) {
+        setMessages([
+          { 
+            role: 'assistant', 
+            content: `您好！我是您的智能护肤顾问。针对您正在浏览的【${productName}】，我可以为您提供专属的护肤问答和合适的护肤搭配方案。建议搭配购买我们店里的其他系列，您可以直接点击我回复的链接查看。请问您目前的肤质是什么样的？` 
+          }
+        ]);
+      }
+      setIsOpen(true);
+    };
+
+    window.addEventListener('open-ai-chat', handleOpenChat);
+    return () => window.removeEventListener('open-ai-chat', handleOpenChat);
+  }, []);
+
+  const renderMessageContent = (content: string) => {
+    const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    const recommendedSlugs: string[] = [];
+
+    while ((match = regex.exec(content)) !== null) {
+      const text = match[1];
+      const url = match[2];
+      const index = match.index;
+
+      if (index > lastIndex) {
+        parts.push(content.substring(lastIndex, index));
+      }
+
+      if (url.startsWith('/products/')) {
+        const slug = url.replace('/products/', '');
+        recommendedSlugs.push(slug);
+        parts.push(
+          <Link
+            key={index}
+            to={url}
+            onClick={() => setIsOpen(false)}
+            className="inline-flex items-center gap-1 text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-full px-3 py-1 my-1 mx-0.5 font-semibold transition-all duration-200 cursor-pointer"
+          >
+            {text} (点击购买)
+          </Link>
+        );
+      } else {
+        parts.push(
+          <a
+            key={index}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-900 underline hover:text-stone-700 mx-0.5 font-medium"
+          >
+            {text}
+          </a>
+        );
+      }
+
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    if (recommendedSlugs.length > 0) {
+      const itemsToBuy = recommendedSlugs
+        .map(slug => productMap[slug])
+        .filter(Boolean);
+
+      if (itemsToBuy.length > 0) {
+        parts.push(
+          <div key="checkout-card" className="mt-4 p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
+            <p className="text-xs font-semibold text-stone-700 flex items-center gap-1">
+              ✨ 智能顾问专属推荐搭配方案：
+            </p>
+            <div className="space-y-2">
+              {itemsToBuy.map(item => (
+                <div key={item.id} className="flex items-center gap-3 bg-white p-2 rounded-lg border border-stone-100">
+                  <img src={item.mainImage || '/images/default-product.png'} alt={item.name} className="w-10 h-10 object-cover rounded-md border border-stone-100" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-stone-800 truncate">{item.name}</p>
+                    <p className="text-xs text-rose-500 font-semibold">¥{item.price}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                navigate('/checkout', {
+                  state: {
+                    items: itemsToBuy.map(item => ({
+                      productId: item.id,
+                      quantity: 1,
+                      product_name: item.name,
+                      product_image: item.mainImage,
+                      basePrice: item.price
+                    }))
+                  }
+                });
+              }}
+              className="w-full py-2 bg-stone-900 hover:bg-stone-800 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+            >
+              一键结算此搭配 (¥{itemsToBuy.reduce((sum, item) => sum + item.price, 0).toFixed(2)})
+            </button>
+          </div>
+        );
+      }
+    }
+
+    return parts.length > 0 ? parts : content;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -46,7 +186,37 @@ export const AIChatbot: React.FC = () => {
       if (!response.ok) throw new Error('API Error');
 
       const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
+      const reply = data.reply;
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+
+      // 提取推荐的商品并自动加购
+      const regex = /\/products\/([a-zA-Z0-9_-]+)/g;
+      let match;
+      const slugsFound: string[] = [];
+      while ((match = regex.exec(reply)) !== null) {
+        slugsFound.push(match[1]);
+      }
+
+      if (slugsFound.length > 0) {
+        setTimeout(async () => {
+          let addedNames: string[] = [];
+          for (const slug of slugsFound) {
+            const prod = productMap[slug];
+            if (prod) {
+              try {
+                await api.post('/cart', { productId: prod.id, quantity: 1 });
+                addedNames.push(prod.name);
+              } catch (e) {
+                console.error('Auto add to cart failed:', prod.name, e);
+              }
+            }
+          }
+          if (addedNames.length > 0) {
+            toast.success(`已为您将推荐的【${addedNames.join('、')}】自动加购！`);
+            queryClient.invalidateQueries({ queryKey: ['cart'] });
+          }
+        }, 500);
+      }
     } catch (error) {
       console.error('Chat error:', error);
       setMessages(prev => [...prev, { role: 'assistant', content: t('auto_aichatbot_327', '抱歉，系统开小差了，请稍后再试。') }]);
@@ -102,7 +272,7 @@ export const AIChatbot: React.FC = () => {
                       ? 'bg-stone-900 text-white rounded-tr-sm' 
                       : 'bg-white text-stone-800 shadow-sm border border-stone-100 rounded-tl-sm'
                   }`}>
-                    {msg.content}
+                    {renderMessageContent(msg.content)}
                   </div>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { FileText, ChevronRight, X, Zap, Quote, Camera } from 'lucide-react';
 import api from '../utils/api';
@@ -52,13 +52,14 @@ interface UserCase {
 export default function ArticlesPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'articles' | 'clinical-reports' | 'swiss-center' | 'academic' | 'user-cases'>('swiss-center');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = (searchParams.get('tab') as 'articles' | 'clinical-reports' | 'swiss-center' | 'academic' | 'user-cases') || 'swiss-center';
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState('');
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
   const [selectedCase, setSelectedCase] = useState<UserCase | null>(null);
   const limit = 12;
-  const currentLang = i18n.language || 'zh';
+  const currentLang = (i18n.resolvedLanguage || i18n.language || 'zh').split('-')[0];
 
   const { data: articlesData, isLoading: articlesLoading } = useQuery({
     queryKey: ['articles', page, keyword],
@@ -98,19 +99,19 @@ export default function ArticlesPage() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
       <Helmet>
-        <title>{t('auto_articlespage_64', '皮肤医学研究院 - TRASOCHY')}</title>
-        <meta name="description" content={t('auto_articlespage_69', 'TRASOCHY皮肤医学研究院，探索前沿护肤科技与护肤知识。')} />
+        <title>{t('auto_articlespage_64', '皮肤科学研创中心 - TRASOCHY')}</title>
+        <meta name="description" content={t('auto_articlespage_69', 'TRASOCHY皮肤科学研创中心，探索前沿护肤科技与护肤知识。')} />
       </Helmet>
 
       <div className="text-center mb-10">
-        <h1 className="text-4xl font-light text-stone-900 tracking-widest uppercase mb-4">{t('auto_shoplayout_345', '皮肤医学研究院')}</h1>
+        <h1 className="text-4xl font-light text-stone-900 tracking-widest uppercase mb-4">{t('auto_shoplayout_345', '皮肤科学研创中心')}</h1>
         <p className="text-sm text-stone-500 tracking-widest">{t('auto_articlespage_66', '探索前沿生物科技，解读肌肤语言')}</p>
       </div>
 
       <div className="flex justify-center mb-12">
         <div className="flex gap-8 border-b border-stone-200">
           <button
-            onClick={() => { setActiveTab('swiss-center'); setPage(1); }}
+            onClick={() => { setSearchParams({ tab: 'swiss-center' }); setPage(1); }}
             className={`pb-4 px-2 text-sm tracking-widest uppercase transition-colors relative flex items-center gap-1 ${activeTab === 'swiss-center' ? 'text-stone-900 font-medium' : 'text-stone-400 hover:text-stone-600'}`}
           >
             {t('tab_swiss_center', '瑞士创研中心')}
@@ -124,28 +125,28 @@ export default function ArticlesPage() {
             <span className="ml-1 text-rose-500 opacity-80 group-hover:opacity-100 transition-opacity"><Zap size={14} /></span>
           </button>
           <button
-            onClick={() => { setActiveTab('clinical-reports'); setPage(1); }}
+            onClick={() => { setSearchParams({ tab: 'clinical-reports' }); setPage(1); }}
             className={`pb-4 px-2 text-sm tracking-widest uppercase transition-colors relative ${activeTab === 'clinical-reports' ? 'text-stone-900 font-medium' : 'text-stone-400 hover:text-stone-600'}`}
           >
             {t('tab_clinical_reports', '临床研究报告')}
             {activeTab === 'clinical-reports' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-stone-900" />}
           </button>
           <button
-            onClick={() => { setActiveTab('academic'); setPage(1); }}
+            onClick={() => { setSearchParams({ tab: 'academic' }); setPage(1); }}
             className={`pb-4 px-2 text-sm tracking-widest uppercase transition-colors relative ${activeTab === 'academic' ? 'text-stone-900 font-medium' : 'text-stone-400 hover:text-stone-600'}`}
           >
             {t('tab_academic', '学术研究成果')}
             {activeTab === 'academic' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-stone-900" />}
           </button>
           <button
-            onClick={() => { setActiveTab('user-cases'); setPage(1); }}
+            onClick={() => { setSearchParams({ tab: 'user-cases' }); setPage(1); }}
             className={`pb-4 px-2 text-sm tracking-widest uppercase transition-colors relative ${activeTab === 'user-cases' ? 'text-stone-900 font-medium' : 'text-stone-400 hover:text-stone-600'}`}
           >
             {t('tab_user_cases', '用户案例')}
             {activeTab === 'user-cases' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-stone-900" />}
           </button>
           <button
-            onClick={() => { setActiveTab('articles'); setPage(1); }}
+            onClick={() => { setSearchParams({ tab: 'articles' }); setPage(1); }}
             className={`pb-4 px-2 text-sm tracking-widest uppercase transition-colors relative ${activeTab === 'articles' ? 'text-stone-900 font-medium' : 'text-stone-400 hover:text-stone-600'}`}
           >
             {t('tab_articles', '科学护肤知识')}
@@ -162,7 +163,7 @@ export default function ArticlesPage() {
             <section className="mb-20">
               <div className="text-center mb-12">
                 <span className="text-stone-400 font-medium tracking-widest text-xs uppercase mb-2 block">Academic Research</span>
-                <h2 className="text-2xl font-light text-stone-900 tracking-widest uppercase mb-4">{t('auto_brandstory_papers_title', '全球顶尖学术论文')}</h2>
+                <h2 className="text-2xl font-light text-stone-900 tracking-widest uppercase mb-4">{t('auto_brandstory_papers_title', '权威学术论文')}</h2>
                 <div className="w-12 h-px bg-stone-300 mx-auto"></div>
               </div>
               <div className="grid md:grid-cols-2 gap-6">
@@ -489,10 +490,10 @@ export default function ArticlesPage() {
                   </svg>
                 </div>
                 <h3 className="text-xl md:text-2xl font-medium text-stone-800 mb-3 tracking-wide">
-                  瑞士皮肤抗衰研究
+                  {t('articles.swiss_antiaging_title', '瑞士皮肤抗衰研究')}
                 </h3>
                 <p className="text-stone-600 max-w-2xl mx-auto text-sm md:text-base leading-relaxed mb-8">
-                  结合瑞士前沿科研与AI大模型技术，对肌肤衰老维度进行深度解析。精准量化皮肤状态，为您提供科学的定制化抗衰老追踪与解决方案。
+                  {t('articles.swiss_antiaging_desc', '结合瑞士前沿科研与AI大模型技术，对肌肤衰老维度进行深度解析。精准量化皮肤状态，为您提供科学的定制化抗衰老追踪与解决方案。')}
                 </p>
                 <Link to="/skin-analysis-pro-intro" className="inline-flex items-center gap-2 px-8 py-3.5 bg-rose-500 text-white rounded-full text-sm font-medium tracking-widest uppercase hover:bg-rose-600 transition-all shadow-lg hover:shadow-rose-500/30 transform hover:-translate-y-0.5">
                   <svg viewBox="0 0 512 512" className="w-4 h-4 rounded-sm overflow-hidden">
@@ -500,7 +501,7 @@ export default function ArticlesPage() {
                     <rect x="213" y="106" width="86" height="300" fill="#FFFFFF"/>
                     <rect x="106" y="213" width="300" height="86" fill="#FFFFFF"/>
                   </svg> 
-                  开始皮肤深度抗衰研究
+                  {t('articles.swiss_antiaging_cta', '开始皮肤深度抗衰研究')}
                 </Link>
               </div>
             </div>
@@ -519,7 +520,7 @@ export default function ArticlesPage() {
                 ) : (
                   <>
                     {t('auto_brandstorypage_88', '瑞士端负责欧洲创新原料开发、方法开发、机理验证及人体功效设计与数据规范；')}<br className="hidden md:block"/>
-                    {t('auto_brandstorypage_89', '中国端负责产业化转化与高效交付，形成贯通上游创新与下游制造的完美闭环体系。')}
+                    {t('auto_brandstorypage_89', '中国端负责产业化转化与高效交付，形成贯通上游创新与下游制造的完整闭环体系。')}
                   </>
                 )}
               </p>
@@ -527,6 +528,13 @@ export default function ArticlesPage() {
           </section>
         </div>
       )}
+
+      {/* 科普与学术免责声明 */}
+      <div className="mt-16 pt-8 border-t border-stone-200 text-center">
+        <p className="text-[11px] text-stone-400 max-w-2xl mx-auto leading-relaxed">
+          【知识科普与学术声明】本专区展示的科研文献、技术解读与科普文章仅供护肤科学知识交流与学术探讨，相关数据均在特定实验条件下测得，不作为消费者个体的具体功效保证。化妆品非药品，不具备疾病预防或治疗功能。
+        </p>
+      </div>
     </div>
   );
 }

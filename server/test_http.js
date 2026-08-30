@@ -6,7 +6,7 @@ const token = jwt.sign({ id: 1, level: 'admin' }, JWT_SECRET, { expiresIn: '1d' 
 
 const req = http.request({
   hostname: '127.0.0.1',
-  port: 5000,
+  port: 7100,
   path: '/api/admin/users?limit=20&page=1',
   method: 'GET',
   headers: {

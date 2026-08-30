@@ -119,6 +119,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   processing: '处理中',
   shipped: '已发货',
   delivered: '已收货',
+  refund_requested: '退款处理中',
   cancelled: '已取消',
   refunded: '已退款',
 };

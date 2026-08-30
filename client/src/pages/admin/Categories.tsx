@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Trash2, Bot, RefreshCw, Tags, Droplets, Sparkles, Heart } from 'lucide-react';
+import { Plus, Edit2, Trash2, Bot, RefreshCw, Tags, Droplets, Sparkles, Heart, Power, PowerOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 
@@ -34,6 +34,13 @@ function TagManager({ apiPath, label }: { apiPath: string; label: string }) {
     mutationFn: (id: number) => api.delete(`/admin/${apiPath}/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: [apiPath] }); toast.success('删除成功'); },
     onError: (e: any) => toast.error(e.response?.data?.error || '删除失败')
+  });
+
+  const toggleMut = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: number }) =>
+      api.put(`/admin/${apiPath}/${id}`, { is_active: is_active ? 0 : 1 }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [apiPath] }); },
+    onError: (e: any) => toast.error(e.response?.data?.error || '操作失败')
   });
 
   const translateMut = useMutation({
@@ -108,6 +115,13 @@ function TagManager({ apiPath, label }: { apiPath: string; label: string }) {
                   </span>
                 </td>
                 <td className="p-3 text-right">
+                  <button
+                    onClick={() => toggleMut.mutate({ id: item.id, is_active: item.is_active })}
+                    title={item.is_active ? '点击禁用' : '点击启用'}
+                    className={`p-1.5 ${item.is_active ? 'text-green-500 hover:text-gray-500' : 'text-gray-300 hover:text-green-500'}`}
+                  >
+                    {item.is_active ? <Power size={16} /> : <PowerOff size={16} />}
+                  </button>
                   <button onClick={() => openModal(item)} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit2 size={16} /></button>
                   <button onClick={() => { if(confirm('确定删除？')) delMut.mutate(item.id); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </td>
@@ -209,6 +223,13 @@ function ProductCategories() {
     onError: (e: any) => toast.error(e.response?.data?.error || '删除失败')
   });
 
+  const toggleMut = useMutation({
+    mutationFn: ({ id, is_active }: { id: number; is_active: number }) =>
+      api.put(`/admin/categories/${id}`, { is_active: is_active ? 0 : 1 }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-categories'] }); },
+    onError: (e: any) => toast.error(e.response?.data?.error || '操作失败')
+  });
+
   const translateMut = useMutation({
     mutationFn: async () => {
       const texts = { name: form.name, description: form.description || '' };
@@ -260,6 +281,13 @@ function ProductCategories() {
                 <td className="p-3 text-gray-500">{cat.sort_order}</td>
                 <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-xs ${cat.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{cat.is_active ? '启用' : '禁用'}</span></td>
                 <td className="p-3 text-right">
+                  <button
+                    onClick={() => toggleMut.mutate({ id: cat.id, is_active: cat.is_active })}
+                    title={cat.is_active ? '点击禁用' : '点击启用'}
+                    className={`p-1.5 ${cat.is_active ? 'text-green-500 hover:text-gray-500' : 'text-gray-300 hover:text-green-500'}`}
+                  >
+                    {cat.is_active ? <Power size={16} /> : <PowerOff size={16} />}
+                  </button>
                   <button onClick={() => openModal(cat)} className="p-1.5 text-gray-400 hover:text-blue-600"><Edit2 size={16} /></button>
                   <button onClick={() => { if(confirm('确定删除？如有商品关联将失败。')) delMut.mutate(cat.id); }} className="p-1.5 text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </td>

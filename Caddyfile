@@ -1,8 +1,0 @@
-{
-  www.trasochy.com {
-    reverse_proxy localhost:5173
-  }
-  trasochy.com {
-    reverse_proxy localhost:5173
-  }
-}

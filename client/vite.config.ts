@@ -12,15 +12,15 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: true,
-    port: 5173,
+    port: 7000,
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:7100',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:7100',
         changeOrigin: true,
       },
     },

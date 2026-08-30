@@ -3,7 +3,15 @@
     "home": "Home",
     "skincare_institute": "Skincare Institute",
     "brand_story": "Brand Story",
-    "login_register": "Login / Register"
+    "login_register": "Login / Register",
+    "profile": "Profile",
+    "orders": "My Orders",
+    "addresses": "Address Book",
+    "favorites": "My Favorites",
+    "admin": "Admin Dashboard",
+    "logout": "Log Out",
+    "register": "Sign Up",
+    "login": "Sign In"
   },
   "common": {
     "search": "Search...",
@@ -73,6 +81,7 @@
         "paid": "Paid",
         "shipped": "Shipped",
         "delivered": "Delivered",
+        "refund_requested": "Refund pending",
         "cancelled": "Cancelled"
       }
     },
@@ -133,16 +142,27 @@
       "paid": "Paid",
       "shipped": "Shipped",
       "delivered": "Delivered",
+      "refund_requested": "Refund pending",
       "cancelled": "Cancelled"
     },
     "confirm_cancel": "Cancel this order?",
     "cancel_success": "Order cancelled",
+    "refund_reason": "Enter refund reason (optional)",
+    "refund_request_success": "Refund request submitted",
+    "refund_requesting": "Submitting...",
+    "refund_request_btn": "Request refund",
     "loading": "Loading...",
     "recipient": "Ship to: ",
     "cancel_btn": "Cancel",
     "review": "Review",
     "empty": "No orders found",
     "shop": "Start Shopping"
+  },
+  "articles": {
+    "ai_author": "TRASOCHY Research Assistant",
+    "swiss_antiaging_title": "Swiss Skin Anti-Aging Research",
+    "swiss_antiaging_desc": "Combining Swiss frontier research with AI foundation-model technology, we analyze skin-aging dimensions in depth and quantify skin status for scientific, personalized anti-aging tracking and solutions.",
+    "swiss_antiaging_cta": "Start deep skin anti-aging analysis"
   },
   "auth": {
     "login_title": "Sign In",

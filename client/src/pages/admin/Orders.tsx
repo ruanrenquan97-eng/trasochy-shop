@@ -12,6 +12,7 @@ const STATUS_TABS = [
   { value: 'processing', label: '处理中' },
   { value: 'shipped', label: '已发货' },
   { value: 'delivered', label: '已收货' },
+  { value: 'refund_requested', label: '退款申请' },
   { value: 'cancelled', label: '已取消' },
   { value: 'refunded', label: '已退款' },
 ];
@@ -145,6 +146,7 @@ export default function AdminOrders() {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-xs px-2 py-0.5 rounded-full ${
                   order.status === 'delivered' ? 'bg-green-50 text-green-600' :
+                  order.status === 'refund_requested' ? 'bg-orange-50 text-orange-600' :
                   order.status === 'refunded' ? 'bg-orange-50 text-orange-600' :
                   order.status === 'cancelled' ? 'bg-stone-100 text-stone-400' :
                   order.status === 'shipped' ? 'bg-blue-50 text-blue-600' :
@@ -173,15 +175,37 @@ export default function AdminOrders() {
                   </button>
                 ))}
                 {/* 退款按钮 - 已付款/处理中/已发货可退款 */}
-                {['paid', 'processing', 'shipped'].includes(order.status) && (
+                {['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && (
                   <button
                     onClick={() => handleRefund(order.order_no, order.id)}
                     disabled={refunding === order.id}
                     className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
                   >
                     <RotateCcw size={10} className={refunding === order.id ? 'animate-spin' : ''} />
-                    {refunding === order.id ? '退款中...' : '退款'}
+                    {refunding === order.id ? '退款中...' : '线上退款'}
                   </button>
+                )}
+                {order.status === 'refund_requested' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleRefund(order.order_no, order.id)}
+                      disabled={refunding === order.id}
+                      className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <RotateCcw size={10} className={refunding === order.id ? 'animate-spin' : ''} />
+                      {refunding === order.id ? '退款中...' : '线上原路退款'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`确认这笔订单 ${order.order_no} 已经通过线下渠道完成了退款，并将其标记为退款完成？`)) {
+                          updateStatus(order.id, 'refunded');
+                        }
+                      }}
+                      className="text-xs bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-lg transition-colors"
+                    >
+                      完成线下退款
+                    </button>
+                  </div>
                 )}
                 {/* 展开详情 */}
                 <button

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShoppingBag, Star, X, Loader2, CreditCard, Wallet } from 'lucide-react';
+import { ShoppingBag, Star, X, Loader2, CreditCard, Wallet, RotateCcw, Check } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -20,11 +20,13 @@ export default function OrdersPage() {
     { value: 'paid', label: t('orders.tabs.paid', '已付款') },
     { value: 'shipped', label: t('orders.tabs.shipped', '已发货') },
     { value: 'delivered', label: t('orders.tabs.delivered', '已收货') },
+    { value: 'refund_requested', label: t('orders.tabs.refund_requested', '退款中') },
     { value: 'cancelled', label: t('orders.tabs.cancelled', '已取消') },
   ];
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
   const [payingOrderNo, setPayingOrderNo] = useState<string | null>(null);
   const [payMethod, setPayMethod] = useState<'wechat' | 'alipay' | 'visa' | 'paypal'>('wechat');
   const [isPaying, setIsPaying] = useState(false);
@@ -68,6 +70,11 @@ export default function OrdersPage() {
     queryFn: () => api.get(`/orders/my?status=${statusFilter}&limit=20`),
   }) as any;
 
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings'),
+  }) as any;
+
   const handleCancel = async (orderNo: string) => {
     if (!confirm(t('orders.confirm_cancel', '确认取消此订单？'))) return;
     setCancellingId(orderNo);
@@ -77,6 +84,18 @@ export default function OrdersPage() {
       refetch();
     } catch (e: any) { toast.error(e.message); }
     finally { setCancellingId(null); }
+  };
+
+  const handleRefundRequest = async (orderNo: string) => {
+    const reason = prompt(t('orders.refund_reason', '请输入退款原因（可选）'));
+    if (reason === null) return;
+    setRefundingId(orderNo);
+    try {
+      await api.post(`/orders/${orderNo}/refund-request`, { reason });
+      toast.success(t('orders.refund_request_success', '退款申请已提交'));
+      refetch();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setRefundingId(null); }
   };
 
   const executePayment = async () => {
@@ -171,6 +190,7 @@ export default function OrdersPage() {
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                   order.status === 'delivered' ? 'bg-green-50 text-green-600' :
+                  order.status === 'refund_requested' ? 'bg-orange-50 text-orange-600' :
                   order.status === 'cancelled' ? 'bg-stone-100 text-stone-500' :
                   order.status === 'shipped' ? 'bg-blue-50 text-blue-600' :
                   'bg-amber-50 text-amber-600'
@@ -199,17 +219,82 @@ export default function OrdersPage() {
                 ))}
               </div>
 
+              {/* 退款追踪流程 (Refund tracking process) */}
+              {['refund_requested', 'refunded'].includes(order.status) && (
+                <div className="mb-4 p-4 bg-orange-50/40 rounded-xl border border-orange-100/60">
+                  <h4 className="text-xs font-semibold text-orange-800 mb-4 flex items-center gap-1">
+                    <RotateCcw size={12} className="text-orange-600" /> {t('orders.refund_tracking', '退款追踪流程')}
+                  </h4>
+                  <div className="flex items-center justify-between text-xs relative max-w-md mx-auto py-2">
+                    {/* Line Background */}
+                    <div className="absolute left-[10%] right-[10%] top-[19px] h-0.5 bg-stone-100 -z-10" />
+                    <div className={`absolute left-[10%] top-[19px] h-0.5 bg-orange-500 transition-all duration-500 -z-10`} 
+                      style={{ width: order.status === 'refunded' ? '80%' : '40%' }} 
+                    />
+
+                    {/* Step 1: Submit */}
+                    <div className="flex flex-col items-center flex-1">
+                      <div className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-sm border-2 border-white">
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                      <span className="mt-2 font-medium text-stone-700 scale-95">{t('orders.refund_step_submit', '提交申请')}</span>
+                      <span className="text-[9px] text-stone-400 mt-0.5">已提交</span>
+                    </div>
+
+                    {/* Step 2: Review */}
+                    <div className="flex flex-col items-center flex-1">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm border-2 border-white font-medium ${
+                        order.status === 'refunded' 
+                          ? 'bg-orange-500 text-white' 
+                          : 'bg-amber-400 text-white animate-pulse'
+                      }`}>
+                        {order.status === 'refunded' ? <Check size={12} strokeWidth={3} /> : '2'}
+                      </div>
+                      <span className="mt-2 font-medium text-stone-700 scale-95">{t('orders.refund_step_review', '商家审核')}</span>
+                      <span className="text-[9px] text-stone-400 mt-0.5">
+                        {order.status === 'refunded' ? '审核通过' : '进行中'}
+                      </span>
+                    </div>
+
+                    {/* Step 3: Completed */}
+                    <div className="flex flex-col items-center flex-1">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm border-2 border-white font-medium ${
+                        order.status === 'refunded' 
+                          ? 'bg-orange-500 text-white' 
+                          : 'bg-stone-100 text-stone-400'
+                      }`}>
+                        {order.status === 'refunded' ? <Check size={12} strokeWidth={3} /> : '3'}
+                      </div>
+                      <span className="mt-2 font-medium text-stone-700 scale-95">{t('orders.refund_step_complete', '退款完成')}</span>
+                      <span className="text-[9px] text-stone-400 mt-0.5">
+                        {order.status === 'refunded' ? '已入账' : '等待中'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between border-t border-stone-100 pt-3">
                 <span className="text-sm text-stone-500">{t('orders.recipient', '收货：')}{order.recipient_name} {order.recipient_phone}</span>
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-rose-500">¥{order.pay_amount?.toFixed(2)}</span>
-                  {['pending', 'paid'].includes(order.status) && (
+                  {order.status === 'pending' && (
                     <button
                       onClick={() => handleCancel(order.order_no)}
                       disabled={cancellingId === order.order_no}
                       className="text-xs text-stone-400 hover:text-rose-500 transition-colors border border-stone-200 px-2 py-1 rounded-lg"
                     >
                       {t('orders.cancel_btn', '取消订单')}
+                    </button>
+                  )}
+                  {['paid', 'processing', 'shipped', 'delivered'].includes(order.status) && (
+                    <button
+                      onClick={() => handleRefundRequest(order.order_no)}
+                      disabled={refundingId === order.order_no}
+                      className="text-xs text-orange-600 hover:text-orange-700 transition-colors border border-orange-200 bg-orange-50 px-2 py-1 rounded-lg flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <RotateCcw size={12} className={refundingId === order.order_no ? 'animate-spin' : ''} />
+                      {refundingId === order.order_no ? t('orders.refund_requesting', '提交中...') : t('orders.refund_request_btn', '申请退款')}
                     </button>
                   )}
                   {order.status === 'pending' && (
@@ -264,7 +349,14 @@ export default function OrdersPage() {
                   { value: 'alipay' as const, label: t('checkout.alipay', 'Alipay'), icon: CreditCard, color: 'text-blue-600' },
                   { value: 'visa' as const, label: t('checkout.visa', 'Visa / Credit Card'), icon: CreditCard, color: 'text-blue-800' },
                   { value: 'paypal' as const, label: t('checkout.paypal', 'PayPal'), icon: Wallet, color: 'text-sky-600' },
-                ].map(m => (
+                ].filter(m => {
+                  if (!settings) return true;
+                  if (m.value === 'wechat') return settings.wechat_enabled !== '0';
+                  if (m.value === 'alipay') return settings.alipay_enabled !== '0';
+                  if (m.value === 'visa') return settings.stripe_enabled !== '0';
+                  if (m.value === 'paypal') return settings.paypal_enabled !== '0';
+                  return true;
+                }).map(m => (
                   <label key={m.value} className={`flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-colors ${payMethod === m.value ? 'border-rose-500 bg-rose-50/50' : 'border-stone-200 hover:border-stone-400'}`}>
                     <input type="radio" name="payMethod" value={m.value} checked={payMethod === m.value} onChange={() => setPayMethod(m.value)} className="sr-only" />
                     <m.icon size={20} className={m.color} />

@@ -40,7 +40,7 @@ export default function AcademicPaperDetailPage() {
           setPaper(found);
         } else {
           // 如果找不到，跳回首页
-          navigate('/articles');
+          navigate(-1);
         }
       } catch (e) {
         console.error(e);
@@ -107,6 +107,13 @@ export default function AcademicPaperDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* 学术与合规声明 */}
+            <div className="pt-8 mt-8 border-t border-stone-100 text-center">
+              <p className="text-[11px] text-stone-400 leading-relaxed max-w-xl mx-auto">
+                【学术文献展示声明】本页面展示的学术论文与科研文献仅用于展示品牌科研探索历程与技术机理交流，文中所述实验数据及结论仅供学术参考，不作为针对具体个体的产品功效承诺。化妆品非药品，不具备疾病预防或治疗功能。
+              </p>
+            </div>
           </div>
         </div>
       </div>

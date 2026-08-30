@@ -37,6 +37,7 @@
     "quill": "^2.0.3",
     "react-quill-new": "^3.8.3",
     "stripe": "^22.1.0",
+    "svg-captcha": "^1.4.0",
     "tsconfig-paths": "^4.2.0",
     "uuid": "^14.0.0",
     "wechatpay-node-v3": "^2.2.1"

@@ -248,7 +248,7 @@ export const SkinAnalysisPro: React.FC = () => {
 
           {!result && (
             <div className="mt-5 text-center">
-              <Link to="/profile" className="text-stone-500 hover:text-stone-800 text-sm inline-flex items-center transition-colors underline underline-offset-4">
+              <Link to="/profile?tab=skin_records" className="text-stone-500 hover:text-stone-800 text-sm inline-flex items-center transition-colors underline underline-offset-4">
                 去个人中心查看分析报告
               </Link>
             </div>

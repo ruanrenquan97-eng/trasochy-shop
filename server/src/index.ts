@@ -1,45 +1,83 @@
+/**
+ * ==============================================================================
+ * TRASOCHY 商城后端入口文件 (Main Entry)
+ * ==============================================================================
+ * 该文件是 Node.js (Express) 后端服务的主入口。
+ * 核心功能包含：
+ * 1. 初始化 Express 实例及基础中间件 (跨域 CORS, 安全 Helmet, JSON Body 解析)。
+ * 2. 全局注册多语言拦截器 (Interceptor)，实现动态的多语言无缝切换。
+ * 3. 全局注册访客/会员 PV/UV 追踪中间件 (Site Visits)。
+ * 4. 挂载所有核心业务路由 (Routers)。
+ * 5. 处理静态文件服务 (图片上传、生产环境的前端页面代理)。
+ * 6. 生成 SEO 所需的 sitemap.xml 和 robots.txt。
+ * 7. 启动数据库连接与定时任务 (Cron Jobs)。
+ * ==============================================================================
+ */
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import dotenv from 'dotenv';
-import { initDB } from './db/migrate';
+
+// 导入数据库初始化与定时任务模块
+import { initDB, initCouponTables, initSurveyTable } from './db/migrate';
 import { initCronJobs } from './utils/cron';
 
-import authRouter from './routes/auth';
-import productsRouter from './routes/products';
-import cartRouter from './routes/cart';
-import ordersRouter from './routes/orders';
-import addressesRouter from './routes/addresses';
-import favoritesRouter from './routes/favorites';
-import reviewsRouter from './routes/reviews';
-import uploadRouter from './routes/upload';
-import adminRouter from './routes/admin';
-import aiRouter from './routes/ai';
-import trackingRouter from './routes/tracking';
-import articlesRouter from './routes/articles';
-import clinicalReportsRouter from './routes/clinical-reports';
-import paymentRouter from './routes/payment';
-import skinRouter from './routes/skin';
-import { sqlite } from './db/index';
+// 导入各业务模块的路由控制器
+import authRouter from './routes/auth';             // 认证与注册
+import productsRouter from './routes/products';     // 商品展示与管理
+import cartRouter from './routes/cart';             // 购物车逻辑
+import ordersRouter from './routes/orders';         // 订单生命周期管理
+import addressesRouter from './routes/addresses';   // 用户收货地址
+import favoritesRouter from './routes/favorites';   // 收藏夹
+import reviewsRouter from './routes/reviews';       // 商品评价
+import uploadRouter from './routes/upload';         // 文件上传
+import adminRouter from './routes/admin';           // B端后台管理核心接口
+import aiRouter from './routes/ai';                 // AI大脑中台与问答
+import trackingRouter from './routes/tracking';     // 数据埋点与追踪
+import articlesRouter from './routes/articles';     // 科普文章与 CMS
+import clinicalReportsRouter from './routes/clinical-reports'; // 临床医学报告
+import paymentRouter from './routes/payment';       // 支付网关回调
+import skinRouter from './routes/skin';             // 皮肤检测功能
+import couponsRouter from './routes/coupons';       // 代金券功能
+import surveyRouter from './routes/survey';         // 学术调研问卷
+import { sqlite } from './db/index';                // SQLite 数据库实例
 
+// 加载环境变量
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 5000;
+// 从环境变量读取端口，默认为 7100
+const PORT = Number(process.env.PORT) || 7100;
 
+// 配置基础安全策略 (禁用严格的 CSP 以允许前端加载外部图片等)
 app.use(helmet({ contentSecurityPolicy: false }));
+
+// 配置跨域请求 (CORS)，允许携带 Cookie 等凭证信息
 app.use(cors({
   origin: process.env.CORS_ORIGIN || true,
   credentials: true,
 }));
+
+// 配置请求体解析器，限制最大负载为 10MB，防止大流量攻击
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 静态文件（上传图片）
+// 静态文件目录挂载：处理 /uploads 路径下的本地上传图片
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// 多语言 API 拦截器 (动态覆盖 translated fields)
+/**
+ * ==============================================================================
+ * [核心功能] 多语言 API 拦截器 (I18n Interceptor)
+ * ==============================================================================
+ * 通过拦截原始的 `res.json` 方法，在数据发送给前端之前进行处理：
+ * 1. 提取 HTTP Header 中的 `accept-language`。
+ * 2. 如果是 C端(前台)请求，直接将 translations JSON 中的对应语言数据
+ *    覆盖合并到对象顶层，并删除 translations 字段，以减少传输体积并让前端无感。
+ * 3. 如果是 B端(后台)请求，则保留 translations 结构，方便后台表单编辑多语言。
+ * ==============================================================================
+ */
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api')) return next();
   const langStr = req.headers['accept-language'] || 'zh';
@@ -140,6 +178,8 @@ app.use('/api/tracking', trackingRouter);
 app.use('/api/articles', articlesRouter);
 app.use('/api/clinical-reports', clinicalReportsRouter);
 app.use('/api/skin', skinRouter);
+app.use('/api/coupons', couponsRouter);
+app.use('/api/survey', surveyRouter);
 
 // 健康检查
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
@@ -192,7 +232,7 @@ app.get('/sitemap.xml', (_req, res) => {
   const categories = sqlite.prepare('SELECT slug FROM categories WHERE is_active = 1').all() as any[];
 
   // 动态文章页面
-  const articles = sqlite.prepare('SELECT slug, updated_at, published_at FROM articles WHERE is_published = 1').all() as any[];
+  const articles = sqlite.prepare("SELECT slug, updated_at, published_at FROM articles WHERE status = 'published'").all() as any[];
 
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
   xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
@@ -273,6 +313,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 async function start() {
   await initDB();
+  initCouponTables();
+  initSurveyTable();
   initCronJobs();
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] 护肤品商城后端运行在 http://localhost:${PORT}`);

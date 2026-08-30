@@ -37,7 +37,9 @@ function getAlipay(): any {
   const gateway = PaymentConfig.getAlipayGateway();
 
   // 动态导入 alipay-sdk
-  const AlipaySdk = require('alipay-sdk').default;
+  const { AlipaySdk } = require('alipay-sdk');
+  const keyType = privateKey.startsWith('MIIE') && !privateKey.startsWith('MIIEp') ? 'PKCS8' : 'PKCS1';
+  console.log(`[Alipay] Init with AppID=${appId}, KeyPrefix=${privateKey.slice(0, 20)}, KeyType=${keyType}`);
 
   alipayInstance = new AlipaySdk({
     appId,
@@ -45,6 +47,7 @@ function getAlipay(): any {
     alipayPublicKey: alipayPublicKey || undefined,
     gateway,
     signType: 'RSA2',
+    keyType,
   });
   lastConfigHash = hash;
 
@@ -66,24 +69,50 @@ export async function createWapOrder(params: {
 
   const notifyUrl = PaymentConfig.getAlipayNotifyUrl();
 
-  // 动态导入 AlipayFormData
-  const AlipayFormData = require('alipay-sdk/lib/form').default;
+  const paramsObj = {
+    method: 'GET',
+    bizContent: {
+      out_trade_no: params.orderNo,
+      total_amount: params.amount.toFixed(2),
+      subject: params.subject,
+      product_code: 'QUICK_WAP_WAY',
+      quit_url: params.quitUrl || undefined,
+    },
+    returnUrl: params.returnUrl,
+    notifyUrl: notifyUrl,
+  };
 
-  const formData = new AlipayFormData();
-  formData.setMethod('get');
-  formData.addField('bizContent', {
-    out_trade_no: params.orderNo,
-    total_amount: params.amount.toFixed(2),
-    subject: params.subject,
-    product_code: 'QUICK_WAP_WAY',
-  });
-  formData.addField('returnUrl', params.returnUrl);
-  formData.addField('notifyUrl', notifyUrl);
-  if (params.quitUrl) {
-    formData.addField('quitUrl', params.quitUrl);
-  }
+  const result = await alipay.pageExec('alipay.trade.wap.pay', paramsObj);
+  return typeof result === 'string' ? result : JSON.stringify(result);
+}
 
-  const result = await alipay.pageExec('alipay.trade.wap.pay', { formData });
+/**
+ * 创建电脑网站支付订单
+ */
+export async function createPageOrder(params: {
+  orderNo: string;
+  amount: number;
+  subject: string;
+  returnUrl: string;
+}): Promise<string> {
+  const alipay = getAlipay();
+  if (!alipay) throw new Error('支付宝未配置');
+
+  const notifyUrl = PaymentConfig.getAlipayNotifyUrl();
+
+  const paramsObj = {
+    method: 'GET',
+    bizContent: {
+      out_trade_no: params.orderNo,
+      total_amount: params.amount.toFixed(2),
+      subject: params.subject,
+      product_code: 'FAST_INSTANT_TRADE_PAY',
+    },
+    returnUrl: params.returnUrl,
+    notifyUrl: notifyUrl,
+  };
+
+  const result = await alipay.pageExec('alipay.trade.page.pay', paramsObj);
   return typeof result === 'string' ? result : JSON.stringify(result);
 }
 
@@ -140,14 +169,14 @@ export async function queryOrder(orderNo: string): Promise<{
       bizContent: { out_trade_no: orderNo },
     });
 
-    const data = result?.alipay_trade_query_response;
+    const data = result?.alipay_trade_query_response || result;
     if (!data) return null;
 
     return {
-      trade_no: data.trade_no || '',
-      status: data.trade_status || '',
-      amount: parseFloat(data.total_amount || '0'),
-      pay_time: data.send_pay_date || '',
+      trade_no: data.trade_no || data.tradeNo || '',
+      status: data.trade_status || data.tradeStatus || '',
+      amount: parseFloat(data.total_amount || data.totalAmount || '0'),
+      pay_time: data.send_pay_date || data.sendPayDate || '',
     };
   } catch (e: any) {
     console.error('[Alipay] 查询失败:', e.message);
@@ -177,13 +206,13 @@ export async function createRefund(params: {
       },
     });
 
-    const data = result?.alipay_trade_refund_response;
+    const data = result?.alipay_trade_refund_response || result;
     if (!data || data.code !== '10000') {
       console.error('[Alipay] 退款失败:', data?.sub_msg || data?.msg);
       return null;
     }
 
-    return { trade_no: data.trade_no || '', status: 'SUCCESS' };
+    return { trade_no: data.trade_no || data.tradeNo || '', status: 'SUCCESS' };
   } catch (e: any) {
     console.error('[Alipay] 退款失败:', e.message);
     return null;

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, ChevronLeft, Loader2 } from 'lucide-react';
+import { Camera, Upload, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 // Removed Baidu skin detail interface
@@ -49,6 +49,7 @@ export const SkinAnalysis: React.FC = () => {
   
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
 
   const [settingsLoading, setSettingsLoading] = useState(true);
 
@@ -138,6 +139,18 @@ export const SkinAnalysis: React.FC = () => {
     }
   };
 
+  // 完成图像测肤后，将结果存入 sessionStorage 并进入 AI 深度问卷
+  const goToQuestionnaire = () => {
+    if (!result) return;
+    sessionStorage.setItem('skin_analysis_result', JSON.stringify({
+      concerns: result.concerns || [],
+      result: result.result || null,
+      recommendations: result.recommendations || [],
+      imageUrl: result.imageUrl || '',
+    }));
+    navigate('/quiz?step=questionnaire');
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 pb-20">
       {/* Header */}
@@ -221,7 +234,7 @@ export const SkinAnalysis: React.FC = () => {
 
           {!result && (
             <div className="mt-5 text-center">
-              <Link to="/profile" className="text-stone-500 hover:text-stone-800 text-sm inline-flex items-center transition-colors underline underline-offset-4">
+              <Link to="/profile?tab=skin_records" className="text-stone-500 hover:text-stone-800 text-sm inline-flex items-center transition-colors underline underline-offset-4">
                 去个人中心查看分析报告
               </Link>
             </div>
@@ -321,25 +334,32 @@ export const SkinAnalysis: React.FC = () => {
                 <h4 className="font-medium text-neutral-800 mb-4 text-sm">为您匹配的专属护肤方案</h4>
                 <div className="space-y-4">
                   {result.recommendations.map((product: any) => (
-                    <div key={product.id} className="flex gap-4 items-center bg-neutral-50 p-3 rounded-xl border border-neutral-100">
+                    <Link 
+                      key={product.id} 
+                      to={`/products/${product.slug}`}
+                      className="flex gap-4 items-center bg-neutral-50 hover:bg-neutral-100 p-3 rounded-xl border border-neutral-100 hover:border-stone-300 transition-all duration-200 cursor-pointer group"
+                    >
                       <img 
                         src={product.mainImage || '/images/default-product.png'} 
                         alt={product.name}
-                        className="w-16 h-16 object-cover rounded-lg bg-white border border-neutral-100"
+                        className="w-16 h-16 object-cover rounded-lg bg-white border border-neutral-100 group-hover:scale-105 transition-transform duration-200"
                         onError={(e) => { (e.target as HTMLImageElement).src = '/images/default-product.png'; }}
                       />
                       <div className="flex-1">
-                        <div className="font-medium text-sm text-neutral-800 line-clamp-2 leading-snug mb-2">{product.name}</div>
-                        <div className="text-red-500 font-bold text-sm">¥{product.basePrice}</div>
+                        <div className="font-medium text-sm text-neutral-800 line-clamp-2 leading-snug mb-1 group-hover:text-stone-900">{product.name}</div>
+                        <div className="text-rose-500 font-bold text-sm">¥{product.basePrice}</div>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>
             )}
 
-            <button className="w-full bg-primary/10 text-primary py-3.5 rounded-full font-medium hover:bg-primary/20 transition-all mt-4">
-              获取更详细的专家指导
+            <button 
+              onClick={goToQuestionnaire}
+              className="w-full bg-stone-900 text-white py-3.5 rounded-full font-medium hover:bg-stone-800 transition-all mt-4 flex items-center justify-center gap-2"
+            >
+              继续 AI 深度问卷测肤 <ChevronRight size={16} />
             </button>
           </div>
         )}

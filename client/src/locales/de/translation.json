@@ -3,7 +3,15 @@
     "home": "Startseite",
     "skincare_institute": "Hautpflege-Institut",
     "brand_story": "Markengeschichte",
-    "login_register": "Anmelden / Registrieren"
+    "login_register": "Anmelden / Registrieren",
+    "profile": "Profil",
+    "orders": "Meine Bestellungen",
+    "addresses": "Adressbuch",
+    "favorites": "Meine Favoriten",
+    "admin": "Administration",
+    "logout": "Abmelden",
+    "register": "Registrieren",
+    "login": "Anmelden"
   },
   "common": {
     "search": "Suchen...",
@@ -73,6 +81,7 @@
         "paid": "Bezahlt",
         "shipped": "Versandt",
         "delivered": "Zugestellt",
+        "refund_requested": "Rückerstattung offen",
         "cancelled": "Storniert"
       }
     },
@@ -133,16 +142,27 @@
       "paid": "Bezahlt",
       "shipped": "Versandt",
       "delivered": "Zugestellt",
+      "refund_requested": "Rückerstattung offen",
       "cancelled": "Storniert"
     },
     "confirm_cancel": "Diese Bestellung stornieren?",
     "cancel_success": "Bestellung storniert",
+    "refund_reason": "Grund für die Rückerstattung eingeben (optional)",
+    "refund_request_success": "Rückerstattungsantrag gesendet",
+    "refund_requesting": "Wird gesendet...",
+    "refund_request_btn": "Rückerstattung beantragen",
     "loading": "Wird geladen...",
     "recipient": "Versand an: ",
     "cancel_btn": "Stornieren",
     "review": "Bewerten",
     "empty": "Keine Bestellungen gefunden",
     "shop": "Einkauf starten"
+  },
+  "articles": {
+    "ai_author": "TRASOCHY Forschungsassistent",
+    "swiss_antiaging_title": "Schweizer Forschung zur Hautalterung",
+    "swiss_antiaging_desc": "Durch die Verbindung Schweizer Spitzenforschung mit AI-Modelltechnologie analysieren wir Dimensionen der Hautalterung tiefgehend und quantifizieren den Hautzustand fur wissenschaftliche, personalisierte Anti-Aging-Losungen.",
+    "swiss_antiaging_cta": "Tiefenanalyse zur Hautalterung starten"
   },
   "auth": {
     "login_title": "Anmelden",

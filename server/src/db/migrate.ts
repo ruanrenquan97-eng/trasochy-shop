@@ -176,6 +176,58 @@ export async function initDB() {
       result_data TEXT NOT NULL,
       created_at INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS user_behavior_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id),
+      action_type TEXT NOT NULL CHECK(action_type IN ('page_view', 'product_click', 'add_to_cart')),
+      path TEXT NOT NULL,
+      product_id INTEGER REFERENCES products(id),
+      dwell_time INTEGER DEFAULT 0,
+      created_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS clinical_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      summary TEXT,
+      cover_image TEXT,
+      pdf_url TEXT,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('published','draft')),
+      translations TEXT,
+      published_at INTEGER,
+      created_at INTEGER,
+      updated_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS skin_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      translations TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS skin_concerns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      translations TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS dosage_forms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      translations TEXT
+    );
   `);
 
   // 迁移：添加页面内容设置
@@ -203,6 +255,22 @@ export async function initDB() {
     console.log('[DB] Column detail added to products');
   } catch (e: any) {
     if (!e.message.includes('duplicate column')) console.log('[DB] detail column already exists or skipped:', e.message);
+  }
+
+  // 迁移：给 orders 表添加 coupon_code 列（代金券功能）
+  try {
+    sqlite.exec(`ALTER TABLE orders ADD COLUMN coupon_code TEXT`);
+    console.log('[DB] Column coupon_code added to orders');
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column')) console.log('[DB] coupon_code column already exists or skipped:', e.message);
+  }
+
+  // 迁移：给 orders 表添加 gift_wrap_fee 列（如已有旧数据库）
+  try {
+    sqlite.exec(`ALTER TABLE orders ADD COLUMN gift_wrap_fee REAL NOT NULL DEFAULT 0`);
+    console.log('[DB] Column gift_wrap_fee added to orders');
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column')) console.log('[DB] gift_wrap_fee column already exists or skipped:', e.message);
   }
 
   // 迁移：添加 translations 列支持多语言
@@ -238,6 +306,21 @@ export async function initDB() {
     console.log('[DB] Column pro_test_limit added to users');
   } catch (e: any) {
     if (!e.message.includes('duplicate column')) console.log('[DB] pro_test_limit column skipped:', e.message);
+  }
+
+  // 迁移：给 users 表添加 username 列（用户名注册，可为 NULL 兼容旧邮箱/手机用户）
+  try {
+    sqlite.exec(`ALTER TABLE users ADD COLUMN username TEXT`);
+    console.log('[DB] Column username added to users');
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column')) console.log('[DB] username column already exists or skipped:', e.message);
+  }
+  // 建唯一索引（忽略 NULL，SQLite UNIQUE 索引天然对 NULL 不去重，但不同 NULL 互不冲突）
+  try {
+    sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username) WHERE username IS NOT NULL`);
+    console.log('[DB] Unique index idx_users_username created');
+  } catch (e: any) {
+    console.log('[DB] idx_users_username index skipped:', e.message);
   }
 
   // 迁移：给 skin_analysis_records 表添加 type 列
@@ -631,8 +714,43 @@ export async function initDB() {
     if (!e.message.includes('duplicate column')) console.log('[DB] Tracking columns skipped:', e.message);
   }
 
+  // 迁移：创建 dreamina_tasks 表
+  try {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS dreamina_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        submit_id TEXT NOT NULL UNIQUE,
+        user_id INTEGER REFERENCES users(id),
+        prompt TEXT NOT NULL,
+        task_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'querying',
+        result_urls TEXT,
+        fail_reason TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      );
+    `);
+    console.log('[DB] dreamina_tasks table ensured');
+  } catch (e: any) {
+    console.log('[DB] Error creating dreamina_tasks table:', e.message);
+  }
+
+  // 迁移：更新部分商品的 is_featured 属性，以便首页能显示产品
+  try {
+    const featuredSlugs = ['amino-acid-cleanser', 'niacinamide-serum', 'retinol-serum', 'centella-mask', 'spf50-sunscreen'];
+    const stmt = sqlite.prepare("UPDATE products SET is_featured = 1 WHERE slug = ?");
+    for (const slug of featuredSlugs) {
+      stmt.run(slug);
+    }
+    console.log('[DB] Updated sample products to be featured');
+  } catch (e: any) {
+    console.log('[DB] Failed to update featured products:', e.message);
+  }
+
   await seedData();
   seedSiteSettings();
+  seedClassifications();
+  seedClinicalReports();
 }
 
 async function seedData() {
@@ -680,16 +798,16 @@ async function seedData() {
 
   // 创建示例商品
   const sampleProducts = [
-    { catSlug: 'cleanser', name: '氨基酸温和洁面乳', slug: 'amino-acid-cleanser', desc: '温和无泡洁面，适合敏感肌，深层清洁毛孔', basePrice: 198, stock: 200 },
-    { catSlug: 'cleanser', name: '玫瑰卸妆水', slug: 'rose-makeup-remover', desc: '天然玫瑰提取，温和卸妆不刺激眼周', basePrice: 158, stock: 150 },
-    { catSlug: 'serum', name: '烟酰胺美白精华', slug: 'niacinamide-serum', desc: '10%高浓度烟酰胺，提亮肤色改善暗沉', basePrice: 328, stock: 300 },
-    { catSlug: 'serum', name: 'A醇抗老精华', slug: 'retinol-serum', desc: '0.1%纯视黄醇，夜间修护淡化细纹', basePrice: 468, stock: 120 },
-    { catSlug: 'serum', name: '玻尿酸保湿水', slug: 'hyaluronic-toner', desc: '三重玻尿酸分子，全天候深层补水', basePrice: 218, stock: 400 },
-    { catSlug: 'mask', name: '积雪草修护面膜', slug: 'centella-mask', desc: '镇静舒缓，修护敏感肌，一盒5片', basePrice: 89, stock: 500 },
-    { catSlug: 'mask', name: '珍珠提亮睡眠面膜', slug: 'pearl-sleeping-mask', desc: '免洗睡眠面膜，珍珠粉提亮肤色', basePrice: 168, stock: 350 },
-    { catSlug: 'sunscreen', name: 'SPF50+清爽防晒乳', slug: 'spf50-sunscreen', desc: 'PA++++物理+化学双重防护，轻薄不油腻', basePrice: 258, stock: 280 },
-    { catSlug: 'sunscreen', name: '防晒喷雾', slug: 'sunscreen-spray', desc: '随时补涂，全身可用防晒喷雾', basePrice: 128, stock: 200 },
-    { catSlug: 'body', name: '身体乳保湿霜', slug: 'body-lotion', desc: '乳木果油+尿素，持久保湿24小时', basePrice: 138, stock: 300 },
+    { catSlug: 'cleanser', name: '氨基酸温和洁面乳', slug: 'amino-acid-cleanser', desc: '温和无泡洁面，适合敏感肌，深层清洁毛孔', basePrice: 198, stock: 200, isFeatured: 1 },
+    { catSlug: 'cleanser', name: '玫瑰卸妆水', slug: 'rose-makeup-remover', desc: '天然玫瑰提取，温和卸妆不刺激眼周', basePrice: 158, stock: 150, isFeatured: 0 },
+    { catSlug: 'serum', name: '烟酰胺美白精华', slug: 'niacinamide-serum', desc: '10%高浓度烟酰胺，提亮肤色改善暗沉', basePrice: 328, stock: 300, isFeatured: 1 },
+    { catSlug: 'serum', name: 'A醇抗老精华', slug: 'retinol-serum', desc: '0.1%纯视黄醇，夜间修护淡化细纹', basePrice: 468, stock: 120, isFeatured: 1 },
+    { catSlug: 'serum', name: '玻尿酸保湿水', slug: 'hyaluronic-toner', desc: '三重玻尿酸分子，全天候深层补水', basePrice: 218, stock: 400, isFeatured: 0 },
+    { catSlug: 'mask', name: '积雪草修护面膜', slug: 'centella-mask', desc: '镇静舒缓，修护敏感肌，一盒5片', basePrice: 89, stock: 500, isFeatured: 1 },
+    { catSlug: 'mask', name: '珍珠提亮睡眠面膜', slug: 'pearl-sleeping-mask', desc: '免洗睡眠面膜，珍珠粉提亮肤色', basePrice: 168, stock: 350, isFeatured: 0 },
+    { catSlug: 'sunscreen', name: 'SPF50+清爽防晒乳', slug: 'spf50-sunscreen', desc: 'PA++++物理+化学双重防护，轻薄不油腻', basePrice: 258, stock: 280, isFeatured: 1 },
+    { catSlug: 'sunscreen', name: '防晒喷雾', slug: 'sunscreen-spray', desc: '随时补涂，全身可用防晒喷雾', basePrice: 128, stock: 200, isFeatured: 0 },
+    { catSlug: 'body', name: '身体乳保湿霜', slug: 'body-lotion', desc: '乳木果油+尿素，持久保湿24小时', basePrice: 138, stock: 300, isFeatured: 0 },
   ];
 
   const catMap: Record<string, number> = {};
@@ -706,8 +824,8 @@ async function seedData() {
   };
 
   for (const p of sampleProducts) {
-    const r = sqlite.prepare(`INSERT INTO products (category_id,name,slug,description,base_price,stock,is_active,created_at,updated_at) VALUES (?,?,?,?,?,?,1,?,?)`).run(
-      catMap[p.catSlug], p.name, p.slug, p.desc, p.basePrice, p.stock, now, now
+    const r = sqlite.prepare(`INSERT INTO products (category_id,name,slug,description,base_price,stock,is_active,is_featured,created_at,updated_at) VALUES (?,?,?,?,?,?,1,?,?,?)`).run(
+      catMap[p.catSlug], p.name, p.slug, p.desc, p.basePrice, p.stock, p.isFeatured || 0, now, now
     );
     const productId = r.lastInsertRowid;
 
@@ -782,4 +900,221 @@ function seedSiteSettings() {
     insert.run(s.key, s.value, s.description, now);
   }
   console.log('[DB] Site settings seeded');
+}
+
+function seedClassifications() {
+  const classifications = [
+    {
+      table: 'dosage_forms',
+      seeds: [
+        { name: '精华液', slug: 'serum' },
+        { name: '面霜', slug: 'cream' },
+        { name: '爽肤水', slug: 'toner' },
+        { name: '洁面乳', slug: 'cleanser' },
+        { name: '面膜', slug: 'mask' },
+        { name: '眼霜', slug: 'eye-cream' },
+        { name: '防晒霜', slug: 'sunscreen' },
+        { name: '乳液', slug: 'lotion' },
+        { name: '肌底液', slug: 'essence' },
+        { name: '卸妆水/油', slug: 'makeup-remover' },
+        { name: '原液', slug: 'ampoule' },
+        { name: '凝胶/啫喱', slug: 'gel' },
+        { name: '精油', slug: 'facial-oil' },
+        { name: '去角质', slug: 'exfoliator' },
+        { name: '唇膜', slug: 'lip-mask' },
+      ]
+    },
+    {
+      table: 'skin_concerns',
+      seeds: [
+        { name: '抗衰老', slug: 'anti-aging' },
+        { name: '美白提亮', slug: 'brightening' },
+        { name: '保湿补水', slug: 'hydrating' },
+        { name: '控油祛痘', slug: 'acne-control' },
+        { name: '修护屏障', slug: 'barrier-repair' },
+        { name: '紧致提拉', slug: 'firming' },
+        { name: '淡斑祛印', slug: 'dark-spots' },
+        { name: '舒缓退红', slug: 'soothing' },
+        { name: '淡化细纹', slug: 'fine-lines' },
+        { name: '收缩毛孔', slug: 'pore-minimizing' },
+        { name: '深层清洁', slug: 'deep-cleansing' },
+        { name: '平衡水油', slug: 'oil-balancing' },
+        { name: '改善暗沉', slug: 'dullness' },
+        { name: '抗氧化', slug: 'antioxidant' },
+        { name: '晒后修护', slug: 'after-sun-care' },
+        { name: '去黑头/闭口', slug: 'blackhead-removal' },
+      ]
+    },
+    {
+      table: 'skin_types',
+      seeds: [
+        { name: '干性肌肤', slug: 'dry' },
+        { name: '油性肌肤', slug: 'oily' },
+        { name: '混合性肌肤', slug: 'combination' },
+        { name: '敏感肌肤', slug: 'sensitive' },
+        { name: '中性肌肤', slug: 'normal' },
+        { name: '痘痘肌肤', slug: 'acne-prone' },
+        { name: '熟龄肌肤', slug: 'mature' },
+        { name: '极干性肌肤', slug: 'very-dry' },
+        { name: '外油内干肌肤', slug: 'dehydrated-oily' },
+      ]
+    }
+  ];
+
+  for (const item of classifications) {
+    const stmt = sqlite.prepare(`INSERT OR IGNORE INTO ${item.table} (name, slug, sort_order) VALUES (?, ?, ?)`);
+    item.seeds.forEach((s, idx) => {
+      stmt.run(s.name, s.slug, idx);
+    });
+    console.log(`[DB] Seeded classifications for ${item.table}`);
+  }
+}
+
+function seedClinicalReports() {
+  const reports = [
+    {
+      title: "烟酰胺与透明质酸联合抗老紧致临床观察",
+      slug: "clinical-niacinamide-ha",
+      summary: "本临床观察旨在评估含有5%烟酰胺与多重分子量透明质酸的精华组合在改善面部细纹、提升肌肤紧致度方面的功效。通过对60名年龄在30-50岁的亚洲女性受试者进行为期8周的测试，结果显示该组合能显著提升角质层含水量，使肌肤弹性和紧致度分别提升了24%和18%，且对大部分受试者无明显刺激性。",
+      cover_image: "https://images.unsplash.com/photo-1629198688000-71f23e745b6e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      pdf_url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      status: "published",
+      translations: JSON.stringify({
+        en: {
+          title: "Clinical Observation of Niacinamide and HA in Anti-aging",
+          summary: "This clinical study evaluates the efficacy of a serum combination containing 5% niacinamide and multi-molecular weight hyaluronic acid in improving facial fine lines and skin firmness. After an 8-week test on 60 Asian female subjects, results showed a 24% increase in skin elasticity and an 18% improvement in firmness."
+        },
+        de: {
+          title: "Klinische Beobachtung von Niacinamid und HA bei Anti-Aging",
+          summary: "Diese klinische Studie bewertet die Wirksamkeit einer Serumkombination, die 5 % Niacinamid und Hyaluronsäure enthält, bei der Verbesserung feiner Gesichtslinien und der Hautfestigkeit. Ergebnisse zeigten eine Erhöhung der Hautelastizität um 24 % und eine Verbesserung der Festigkeit um 18 %."
+        }
+      }),
+      published_at: 1777986515928,
+      created_at: 1777986515928,
+      updated_at: 1777986515928
+    },
+    {
+      title: "多重胜肽精华对敏感肌屏障修复的临床测试",
+      slug: "clinical-multi-peptide-repair",
+      summary: "该临床测试招募了45位经皮肤科医生评估为敏感肌（伴随泛红、刺痛等症状）的志愿者。连续使用多重胜肽修复精华4周后，通过经皮水分流失(TEWL)和皮肤红斑指数(Erythema Index)测试发现，受试者的TEWL平均下降了31%，红斑指数显著降低，证实了该产品在修护受损屏障、舒缓肌肤不适方面的卓越表现。",
+      cover_image: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      pdf_url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      status: "published",
+      translations: JSON.stringify({
+        en: {
+          title: "Clinical Trial of Multi-Peptide Serum on Barrier Repair",
+          summary: "This trial recruited 45 volunteers with sensitive skin. After using the multi-peptide repair serum for 4 weeks, subjects showed a 31% average decrease in TEWL and a significant reduction in the Erythema Index, confirming its excellent performance in repairing damaged barriers."
+        },
+        de: {
+          title: "Klinische Studie von Multi-Peptid-Serum zur Barriere-Reparatur",
+          summary: "Für diese Studie wurden 45 Freiwillige mit empfindlicher Haut rekrutiert. Nach 4-wöchiger Anwendung zeigte sich ein durchschnittlicher Rückgang des TEWL um 31 % und eine signifikante Verringerung des Erythem-Index, was die hervorragende Leistung bei der Reparatur bestätigte."
+        }
+      }),
+      published_at: 1777986515933,
+      created_at: 1777986515933,
+      updated_at: 1777986515933
+    },
+    {
+      title: "积雪草提取物褪红修护功效性评估报告",
+      slug: "clinical-centella-asiatica",
+      summary: "本报告对含有高浓度高纯度积雪草提取物（Centella Asiatica Extract）的面霜进行了体外与人体双重评估。人体功效评估阶段表明，在激光类医美项目后使用该面霜，能够有效缩短肌肤恢复周期，泛红消退时间比对照组缩短了近40%，体现了其优异的抗炎舒缓及屏障重塑潜力。",
+      cover_image: "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+      pdf_url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      status: "published",
+      translations: JSON.stringify({
+        en: {
+          title: "Efficacy Evaluation of Centella Asiatica in Redness Reduction",
+          summary: "This report conducted both in vitro and in vivo evaluations of a cream containing high-purity Centella Asiatica extract. The results indicated that using the cream after laser cosmetic procedures effectively shortened the skin recovery period, with redness fading time reduced by nearly 40% compared to the control group."
+        },
+        de: {
+          title: "Wirksamkeitsbewertung von Centella Asiatica zur Rötungsreduzierung",
+          summary: "Dieser Bericht führte Bewertungen einer Creme mit hochreinem Centella Asiatica-Extrakt durch. Die Ergebnisse zeigten, dass die Verwendung der Creme nach Laser-Kosmetikeingriffen die Hauterholungszeit effektiv verkürzte, wobei die Zeit zum Abklingen der Rötung im Vergleich zur Kontrollgruppe um fast 40 % reduziert wurde."
+        }
+      }),
+      published_at: 1777986515937,
+      created_at: 1777986515937,
+      updated_at: 1777986515937
+    }
+  ];
+
+  const stmt = sqlite.prepare(`
+    INSERT INTO clinical_reports (title, slug, summary, cover_image, pdf_url, status, translations, published_at, created_at, updated_at) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(slug) DO NOTHING
+  `);
+
+  for (const r of reports) {
+    stmt.run(r.title, r.slug, r.summary, r.cover_image, r.pdf_url, r.status, r.translations, r.published_at, r.created_at, r.updated_at);
+  }
+  console.log('[DB] Seeded clinical reports');
+}
+
+// ============================================================
+// 代金券功能数据库迁移（幂等，可安全重复执行）
+// ============================================================
+export function initCouponTables() {
+  // 代金券配置表（按 source 区分来源，每种来源只有一条全局配置）
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS coupon_configs (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      source      TEXT NOT NULL UNIQUE,   -- 'quiz_completion'
+      type        TEXT NOT NULL DEFAULT 'fixed',   -- 'fixed' | 'percent'
+      value       REAL NOT NULL DEFAULT 30,        -- 固定金额(元) 或 折扣率(如 0.1 = 10%)
+      min_amount  REAL NOT NULL DEFAULT 100,       -- 最低消费门槛(元)
+      valid_days  INTEGER NOT NULL DEFAULT 30,     -- 有效天数
+      is_active   INTEGER NOT NULL DEFAULT 1,      -- 是否开启
+      description TEXT,
+      updated_at  INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS user_coupons (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id        INTEGER NOT NULL REFERENCES users(id),
+      code           TEXT NOT NULL UNIQUE,         -- 唯一券码，如 QUIZ-A3K9MX
+      source         TEXT NOT NULL,                -- 来源
+      type           TEXT NOT NULL,                -- 'fixed' | 'percent'
+      value          REAL NOT NULL,                -- 面值
+      min_amount     REAL NOT NULL DEFAULT 0,      -- 最低消费
+      status         TEXT NOT NULL DEFAULT 'unused', -- 'unused' | 'used' | 'expired'
+      expires_at     INTEGER NOT NULL,             -- 过期时间戳(ms)
+      used_order_no  TEXT,                         -- 已使用的订单号
+      used_at        INTEGER,
+      created_at     INTEGER
+    );
+  `);
+
+  // 插入默认问卷完成奖励配置（已存在则忽略）
+  try {
+    sqlite.prepare(`
+      INSERT OR IGNORE INTO coupon_configs (source, type, value, min_amount, valid_days, is_active, description, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('quiz_completion', 'fixed', 30, 100, 30, 1, '完成 AI 护肤问卷奖励代金券', Date.now());
+    console.log('[DB] Coupon tables ready');
+  } catch (e: any) {
+    console.log('[DB] Coupon config init skipped:', e.message);
+  }
+}
+
+// ============================================================
+// 学术调研问卷结果表（AI购物助手 vs 传统搜索 体验比较）
+// ============================================================
+export function initSurveyTable() {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id          INTEGER REFERENCES users(id),
+      answers          TEXT NOT NULL,                          -- JSON 完整答案
+      survey_type      TEXT NOT NULL DEFAULT 'ai_vs_search',   -- 问卷类型
+      path_type        TEXT NOT NULL DEFAULT 'traditional_search', -- 'traditional_search' | 'ai_assisted'
+      cart_items_count INTEGER DEFAULT 0,                      -- 加购商品数
+      metadata         TEXT,                                   -- 实验元数据
+      created_at       INTEGER
+    );
+  `);
+
+  try { sqlite.exec(`ALTER TABLE survey_responses ADD COLUMN path_type TEXT NOT NULL DEFAULT 'traditional_search'`); } catch {}
+  try { sqlite.exec(`ALTER TABLE survey_responses ADD COLUMN cart_items_count INTEGER DEFAULT 0`); } catch {}
+  try { sqlite.exec(`ALTER TABLE survey_responses ADD COLUMN metadata TEXT`); } catch {}
+
+  console.log('[DB] Survey table ready');
 }

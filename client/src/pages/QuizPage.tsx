@@ -1,48 +1,219 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, ChevronRight, Sparkles, RefreshCcw, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Sparkles, RefreshCcw, LogIn, ShoppingCart, Check, Gift, ClipboardList } from 'lucide-react';
+import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from '../contexts/authStore';
 
+type QuizOption = { label: string; value: string; desc: string };
+type QuizQuestion = { id: string; question: string; options: QuizOption[] };
+
+const QUIZ_COPY = {
+  zh: {
+    serviceTitle: '服务升级中',
+    serviceBody: 'AI测肤功能暂未开放，敬请期待。',
+    backHome: '返回首页',
+    hubTitle: '选择您的测肤方式',
+    hubBody: '我们提供深度问卷分析与 DermiVue 图像测肤技术，为您科学定制日常护肤方案。',
+    photoTitle: 'DermiVue 智能AI皮肤测试',
+    photoBody: '拍摄或上传您的面部照片，利用计算机视觉辅助分析毛孔、纹理与水油平衡等日常肌肤状态。',
+    photoCtaLogin: '请先登录',
+    photoCtaStart: '立即拍摄',
+    questionnaireTitle: 'AI 深度问卷测肤',
+    questionnaireBody: '通过一系列专业护肤问题，结合您的年龄、肤质与核心诉求，由 AI 顾问为您匹配适合的组合。',
+    questionnaireCta: '开始问卷',
+    loadingTitle: 'TRASOCHY AI 正在为您分析',
+    loadingBody: '匹配专属日常护肤方案...',
+    resultTitle: '为您定制的护肤方案',
+    resultSignature: '— TRASOCHY AI 护肤顾问',
+    resultBody: '基于您的肤质与核心诉求，我们的 AI 为您甄选了以下护肤组合，助力呵护肌肤健康状态。',
+    topMatch: 'TOP 匹配',
+    retest: '重新测试',
+    dispatch: '分析中转站',
+    questionProgress: (current: number, total: number) => `问题 ${current} / ${total}`,
+    aiThinking: 'AI 正在思考追问...',
+    needMore: '是否需要更精准的方案？',
+    complete: '问卷已全部完成',
+    partialText: (count: number) => `当前已完成 ${count} 道题目。您可以选择直接生成专属护肤方案，或者让 AI 护肤顾问对您的肌肤情况进行深入追问。`,
+    completeText: '您已经完成了 10 道题目的深度测肤，AI 顾问已经完全掌握了您的肌肤档案！',
+    askMore: (left: number) => `让 AI 动态追问 (还剩 ${left} 题)`,
+    generateReport: '直接生成专属报告',
+    questionFail: '抱歉，AI 追问失败，请直接生成报告。',
+    questions: [
+      {
+        id: 'skin_type',
+        question: '您的肤质属于哪一种？',
+        options: [
+          { label: '干性皮肤', value: 'dry', desc: '经常感到紧绷，容易脱皮' },
+          { label: '油性皮肤', value: 'oily', desc: '全脸容易出油，毛孔粗大' },
+          { label: '混合性皮肤', value: 'combination', desc: 'T区出油，U区偏干' },
+          { label: '敏感性皮肤', value: 'sensitive', desc: '容易泛红、发痒、刺痛' },
+        ],
+      },
+      {
+        id: 'primary_concern',
+        question: '您目前最主要的护肤诉求是什么？',
+        options: [
+          { label: '抗老紧致', value: 'anti-aging', desc: '淡化细纹，提升面部轮廓' },
+          { label: '美白淡斑', value: 'brightening', desc: '改善暗沉，均匀肤色' },
+          { label: '祛痘控油', value: 'acne', desc: '抑制痘痘，平衡水油' },
+          { label: '补水保湿', value: 'hydrating', desc: '深层补水，强韧屏障' },
+        ],
+      },
+      {
+        id: 'age_group',
+        question: '您的年龄段是？',
+        options: [
+          { label: '20岁以下', value: 'under-20', desc: '基础保湿防晒为主' },
+          { label: '20 - 30岁', value: '20-30', desc: '初抗老，维持肌肤稳定' },
+          { label: '30 - 40岁', value: '30-40', desc: '深度抗老，淡化干纹细纹' },
+          { label: '40岁以上', value: 'over-40', desc: '全面提拉紧致，密集修护' },
+        ],
+      },
+    ] as QuizQuestion[],
+  },
+  en: {
+    serviceTitle: 'Service update in progress',
+    serviceBody: 'The AI skin analysis feature is not available yet. Please stay tuned.',
+    backHome: 'Back to home',
+    hubTitle: 'Choose your skin analysis method',
+    hubBody: 'Choose between a guided AI questionnaire and DermiVue image-based skin analysis for a tailored professional skincare plan.',
+    photoTitle: 'DermiVue AI Skin Analysis',
+    photoBody: 'Take or upload a facial photo. Advanced computer vision analyzes pores, fine lines, pigmentation, and deeper skin signals in moments.',
+    photoCtaLogin: 'Please sign in first',
+    photoCtaStart: 'Start photo analysis',
+    questionnaireTitle: 'AI Deep Questionnaire',
+    questionnaireBody: 'Answer professional skincare questions about your age, skin type, and concerns so the AI consultant can match the best routine.',
+    questionnaireCta: 'Start questionnaire',
+    loadingTitle: 'TRASOCHY AI is analyzing your skin',
+    loadingBody: 'Matching professional skincare solutions...',
+    resultTitle: 'Your personalized skincare plan',
+    resultSignature: '— TRASOCHY AI Skincare Consultant',
+    resultBody: 'Based on your skin type and core concerns, our AI has selected the following professional skincare combinations. Use consistently for 28 days and watch your skin renew.',
+    topMatch: 'TOP MATCH',
+    retest: 'Retake quiz',
+    dispatch: 'Analysis checkpoint',
+    questionProgress: (current: number, total: number) => `Question ${current} / ${total}`,
+    aiThinking: 'AI is preparing a follow-up question...',
+    needMore: 'Would you like a more precise plan?',
+    complete: 'Questionnaire completed',
+    partialText: (count: number) => `You have completed ${count} questions. You can generate your personalized plan now, or let the AI consultant ask a deeper follow-up question.`,
+    completeText: 'You have completed 10 deep skin questions. The AI consultant has enough detail to create your skin profile.',
+    askMore: (left: number) => `Let AI ask a follow-up (${left} left)`,
+    generateReport: 'Generate personalized report',
+    questionFail: 'Sorry, the AI follow-up failed. Please generate the report directly.',
+    questions: [
+      {
+        id: 'skin_type',
+        question: 'What is your skin type?',
+        options: [
+          { label: 'Dry skin', value: 'dry', desc: 'Often feels tight and may flake' },
+          { label: 'Oily skin', value: 'oily', desc: 'Prone to shine and enlarged pores' },
+          { label: 'Combination skin', value: 'combination', desc: 'Oily T-zone with drier cheeks' },
+          { label: 'Sensitive skin', value: 'sensitive', desc: 'Prone to redness, itching, or stinging' },
+        ],
+      },
+      {
+        id: 'primary_concern',
+        question: 'What is your main skincare concern right now?',
+        options: [
+          { label: 'Firming and anti-aging', value: 'anti-aging', desc: 'Reduce fine lines and refine facial contours' },
+          { label: 'Brightening and spots', value: 'brightening', desc: 'Improve dullness and even out skin tone' },
+          { label: 'Acne and oil control', value: 'acne', desc: 'Reduce breakouts and balance oil and moisture' },
+          { label: 'Hydration', value: 'hydrating', desc: 'Deep hydration and stronger barrier support' },
+        ],
+      },
+      {
+        id: 'age_group',
+        question: 'What is your age range?',
+        options: [
+          { label: 'Under 20', value: 'under-20', desc: 'Focus on hydration and sun protection' },
+          { label: '20 - 30', value: '20-30', desc: 'Early anti-aging and skin stability' },
+          { label: '30 - 40', value: '30-40', desc: 'Deeper anti-aging and fine-line care' },
+          { label: 'Over 40', value: 'over-40', desc: 'Firming, lifting, and intensive repair' },
+        ],
+      },
+    ] as QuizQuestion[],
+  },
+  de: {
+    serviceTitle: 'Service wird aktualisiert',
+    serviceBody: 'Die AI-Hautanalyse ist noch nicht verfugbar. Bitte schauen Sie bald wieder vorbei.',
+    backHome: 'Zur Startseite',
+    hubTitle: 'Wahlen Sie Ihre Hautanalyse',
+    hubBody: 'Wahlen Sie zwischen einem gefuhrten AI-Fragebogen und der DermiVue Bildanalyse fur einen personalisierten professionellen Pflegeplan.',
+    photoTitle: 'DermiVue AI-Hautanalyse',
+    photoBody: 'Nehmen Sie ein Gesichtsfoto auf oder laden Sie es hoch. Moderne Computer-Vision analysiert Poren, feine Linien, Pigmentierung und weitere Hautsignale.',
+    photoCtaLogin: 'Bitte zuerst anmelden',
+    photoCtaStart: 'Fotoanalyse starten',
+    questionnaireTitle: 'AI-Tiefenfragebogen',
+    questionnaireBody: 'Beantworten Sie professionelle Fragen zu Alter, Hauttyp und Anliegen, damit der AI-Berater die passende Routine auswahlen kann.',
+    questionnaireCta: 'Fragebogen starten',
+    loadingTitle: 'TRASOCHY AI analysiert Ihre Haut',
+    loadingBody: 'Professionelle Hautpflegelosungen werden abgeglichen...',
+    resultTitle: 'Ihr personalisierter Hautpflegeplan',
+    resultSignature: '— TRASOCHY AI Hautpflegeberater',
+    resultBody: 'Basierend auf Ihrem Hauttyp und Ihren wichtigsten Anliegen hat unsere AI die folgenden professionellen Pflegekombinationen ausgewahlt. Nutzen Sie sie konsequent 28 Tage lang.',
+    topMatch: 'TOP-TREFFER',
+    retest: 'Erneut testen',
+    dispatch: 'Analyse-Zwischenstation',
+    questionProgress: (current: number, total: number) => `Frage ${current} / ${total}`,
+    aiThinking: 'AI bereitet eine Folgefrage vor...',
+    needMore: 'Mochten Sie einen praziseren Plan?',
+    complete: 'Fragebogen abgeschlossen',
+    partialText: (count: number) => `Sie haben ${count} Fragen beantwortet. Sie konnen jetzt Ihren personlichen Plan erstellen oder die AI eine vertiefende Folgefrage stellen lassen.`,
+    completeText: 'Sie haben 10 tiefe Hautfragen beantwortet. Der AI-Berater hat genug Details fur Ihr Hautprofil.',
+    askMore: (left: number) => `AI-Folgefrage stellen (${left} ubrig)`,
+    generateReport: 'Personlichen Bericht erstellen',
+    questionFail: 'Die AI-Folgefrage konnte nicht erstellt werden. Bitte erstellen Sie den Bericht direkt.',
+    questions: [
+      {
+        id: 'skin_type',
+        question: 'Welcher Hauttyp trifft auf Sie zu?',
+        options: [
+          { label: 'Trockene Haut', value: 'dry', desc: 'Fuhlt sich oft gespannt an und schuppt leicht' },
+          { label: 'Olige Haut', value: 'oily', desc: 'Neigt zu Glanz und vergrosserten Poren' },
+          { label: 'Mischhaut', value: 'combination', desc: 'Olige T-Zone, trockenere Wangen' },
+          { label: 'Empfindliche Haut', value: 'sensitive', desc: 'Neigt zu Rotungen, Juckreiz oder Brennen' },
+        ],
+      },
+      {
+        id: 'primary_concern',
+        question: 'Was ist derzeit Ihr wichtigstes Hautpflegeanliegen?',
+        options: [
+          { label: 'Straffung und Anti-Aging', value: 'anti-aging', desc: 'Feine Linien mildern und Konturen verbessern' },
+          { label: 'Aufhellung und Pigmentflecken', value: 'brightening', desc: 'Fahlen Teint verbessern und Hautton ausgleichen' },
+          { label: 'Akne und Oligkeit', value: 'acne', desc: 'Unreinheiten reduzieren und die Haut balancieren' },
+          { label: 'Feuchtigkeit', value: 'hydrating', desc: 'Tiefe Feuchtigkeit und starke Hautbarriere' },
+        ],
+      },
+      {
+        id: 'age_group',
+        question: 'In welcher Altersgruppe sind Sie?',
+        options: [
+          { label: 'Unter 20', value: 'under-20', desc: 'Feuchtigkeit und Sonnenschutz im Fokus' },
+          { label: '20 - 30', value: '20-30', desc: 'Fruhe Anti-Aging-Pflege und Hautstabilitat' },
+          { label: '30 - 40', value: '30-40', desc: 'Intensivere Anti-Aging- und Linienpflege' },
+          { label: 'Uber 40', value: 'over-40', desc: 'Straffung, Lifting und intensive Reparatur' },
+        ],
+      },
+    ] as QuizQuestion[],
+  },
+};
+
+function getQuizLanguage(language?: string): 'zh' | 'en' | 'de' {
+  const base = (language || 'zh').split('-')[0].toLowerCase();
+  return base === 'en' || base === 'de' ? base : 'zh';
+}
+
 
 
 export default function QuizPage() {
-    const { t } = useTranslation();
-  const QUESTIONS = [
-    {
-      id: 'skin_type',
-      question: t('auto_quizpage_279', '您的肤质属于哪一种？'),
-      options: [
-        { label: t('auto_quizpage_280', '干性皮肤'), value: 'dry', desc: t('auto_quizpage_281', '经常感到紧绷，容易脱皮') },
-        { label: t('auto_quizpage_282', '油性皮肤'), value: 'oily', desc: t('auto_quizpage_283', '全脸容易出油，毛孔粗大') },
-        { label: t('auto_quizpage_284', '混合性皮肤'), value: 'combination', desc: t('auto_quizpage_285', 'T区出油，U区偏干') },
-        { label: t('auto_quizpage_286', '敏感性皮肤'), value: 'sensitive', desc: t('auto_quizpage_287', '容易泛红、发痒、刺痛') },
-      ]
-    },
-    {
-      id: 'primary_concern',
-      question: t('auto_quizpage_288', '您目前最主要的护肤诉求是什么？'),
-      options: [
-        { label: t('auto_quizpage_289', '抗老紧致'), value: 'anti-aging', desc: t('auto_quizpage_290', '淡化细纹，提升面部轮廓') },
-        { label: t('auto_quizpage_291', '美白淡斑'), value: 'brightening', desc: t('auto_quizpage_292', '改善暗沉，均匀肤色') },
-        { label: t('auto_quizpage_293', '祛痘控油'), value: 'acne', desc: t('auto_quizpage_294', '抑制痘痘，平衡水油') },
-        { label: t('auto_quizpage_295', '补水保湿'), value: 'hydrating', desc: t('auto_quizpage_296', '深层补水，强韧屏障') },
-      ]
-    },
-    {
-      id: 'age_group',
-      question: t('auto_quizpage_297', '您的年龄段是？'),
-      options: [
-        { label: t('auto_quizpage_298', '20岁以下'), value: 'under-20', desc: t('auto_quizpage_299', '基础保湿防晒为主') },
-        { label: t('auto_quizpage_300', '20 - 30岁'), value: '20-30', desc: t('auto_quizpage_301', '初抗老，维持肌肤稳定') },
-        { label: t('auto_quizpage_302', '30 - 40岁'), value: '30-40', desc: t('auto_quizpage_303', '深度抗老，淡化干纹细纹') },
-        { label: t('auto_quizpage_304', '40岁以上'), value: 'over-40', desc: t('auto_quizpage_305', '全面提拉紧致，密集修护') },
-      ]
-    }
-  ];
-  const navigate = useNavigate();
+  const { i18n } = useTranslation();
   const { user } = useAuthStore();
+  const language = getQuizLanguage(i18n.resolvedLanguage || i18n.language);
+  const copy = QUIZ_COPY[language];
+  const navigate = useNavigate();
   const [quizMode, setQuizMode] = useState<'hub' | 'questionnaire'>('hub');
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -51,19 +222,47 @@ export default function QuizPage() {
   const [guardianLetter, setGuardianLetter] = useState<string>('');
   const [dynamicQuestions, setDynamicQuestions] = useState<any[]>([]);
   const [fetchingQuestion, setFetchingQuestion] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
+  // DermiVue 图像测肤结果（融合进 AI 问卷分析）
+  const [skinResult, setSkinResult] = useState<any>(null);
 
-  const allQuestions = [...QUESTIONS, ...dynamicQuestions];
-
-  // 假设已经获取了全局设置或在后台开启了功能
+  // 全局设置
   const [settings, setSettings] = useState<any>({});
   const [settingsLoading, setSettingsLoading] = useState(true);
+
+  // 解析后台配置的固定题目，若无则使用内置兜底题目
+  let customQuestions: QuizQuestion[] | null = null;
+  const rawCustomQ = settings[`quiz_questions_${language}`];
+  if (rawCustomQ) {
+    try {
+      const parsed = typeof rawCustomQ === 'string' ? JSON.parse(rawCustomQ) : rawCustomQ;
+      if (Array.isArray(parsed) && parsed.length > 0) customQuestions = parsed;
+    } catch (e) {}
+  }
+  const QUESTIONS = customQuestions || copy.questions;
+  const allQuestions = [...QUESTIONS, ...dynamicQuestions];
+  const maxDynamic = settings.quiz_max_dynamic_questions !== undefined ? Number(settings.quiz_max_dynamic_questions) : 7;
+  const maxAllowedTotal = QUESTIONS.length + maxDynamic;
+
   
   useEffect(() => {
+    // 读取 DermiVue 图像测肤结果（sessionStorage）
+    const raw = sessionStorage.getItem('skin_analysis_result');
+    if (raw) {
+      try { setSkinResult(JSON.parse(raw)); } catch (e) {}
+    }
     api.get('/settings').then(res => {
       setSettings(res as any);
-      // 如果获取到设置，且未开启 VISIA，自动跳过 hub
+      // 未开启图像测肤，直接进入问卷
       if ((res as any).feature_skin_analysis !== '1') {
         setQuizMode('questionnaire');
+      } else {
+        // 带着图像结果进入（step=questionnaire）则直接进入问卷
+        const step = new URLSearchParams(window.location.search).get('step');
+        if (step === 'questionnaire' && sessionStorage.getItem('skin_analysis_result')) {
+          setQuizMode('questionnaire');
+        }
       }
       setSettingsLoading(false);
     });
@@ -84,12 +283,12 @@ export default function QuizPage() {
         const ansLabel = q.options.find((o: any) => o.value === ansValue)?.label || ansValue;
         return { question: q.question, answer: ansLabel };
       });
-      const newQuestion = await api.post('/ai/generate-question', { history });
+      const newQuestion = await api.post('/ai/generate-question', { history, language });
       setDynamicQuestions(prev => [...prev, newQuestion]);
       // currentStep will naturally point to the new question since length increased
     } catch (err) {
       console.error(err);
-      alert('抱歉，AI 追问失败，请直接生成报告。');
+      alert(copy.questionFail);
     }
     setFetchingQuestion(false);
   };
@@ -104,11 +303,14 @@ export default function QuizPage() {
       });
 
       const res: any = await api.post('/ai/analyze', { 
-        answers: { ...finalAnswers, customDetails: customDetailsList } 
+        answers: { ...finalAnswers, customDetails: customDetailsList },
+        language,
+        skinAnalysis: skinResult,
       });
       setResults(res.products || []);
       setGuardianLetter(res.guardian_letter || '');
       setLoading(false);
+
     } catch (err) {
       console.error(err);
       setLoading(false);
@@ -140,60 +342,61 @@ export default function QuizPage() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-serif text-stone-800 mb-2">{t('auto_quizpage_267', t('auto_quizpage_267', '服务升级中'))}</h2>
-          <p className="text-stone-500">{t('auto_quizpage_268', t('auto_quizpage_268', 'AI测肤功能暂未开放，敬请期待。'))}</p>
-          <button onClick={() => navigate('/')} className="mt-6 px-6 py-2 bg-stone-900 text-white rounded-full">{t('auto_quizpage_269', t('auto_quizpage_269', '返回首页'))}</button>
+          <h2 className="text-2xl font-serif text-stone-800 mb-2">{copy.serviceTitle}</h2>
+          <p className="text-stone-500">{copy.serviceBody}</p>
+          <button onClick={() => navigate('/')} className="mt-6 px-6 py-2 bg-stone-900 text-white rounded-full">{copy.backHome}</button>
         </div>
       </div>
     );
   }
 
-  // HUB 选择页 (如果开启了 VISIA 照片测肤)
+  // 测肤流程引导页（先 DermiVue 图像测肤，再 AI 深度问卷）
   if (quizMode === 'hub' && settings.feature_skin_analysis === '1') {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center bg-[#faf9f8] px-4 py-12">
         <div className="text-center mb-12">
-          <h1 className="text-3xl md:text-4xl font-serif text-stone-900 mb-4">选择您的测肤方式</h1>
+          <h1 className="text-3xl md:text-4xl font-serif text-stone-900 mb-4">您的专属测肤之旅</h1>
           <p className="text-stone-500 max-w-lg mx-auto">
-            我们提供深度问卷分析与全球顶尖的 DermiVue 图像测肤技术，为您精准定制院线级护肤方案。
+            两步完成精准测肤：先用 DermiVue 图像技术客观检测肌肤，再完成 AI 深度问卷，获取融合定制的专属日常护肤方案。
           </p>
         </div>
-        
-        <div className="grid md:grid-cols-2 gap-6 max-w-4xl w-full">
-          {/* VISIA 照片测肤 (放到左侧) */}
-          <button 
-            onClick={() => navigate('/skin-analysis')}
-            className="group flex flex-col items-center bg-stone-900 p-8 rounded-3xl shadow-md border border-stone-800 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-stone-800 rounded-full blur-3xl opacity-50 -mr-10 -mt-10 pointer-events-none"></div>
-            <div className="w-16 h-16 bg-stone-800 text-blue-400 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform relative z-10">
-              <Camera className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-serif text-white mb-3 w-full text-center relative z-10">DermiVue 智能AI皮肤测试</h2>
-            <p className="text-stone-400 text-sm text-center mb-6 relative z-10">
-              拍摄或上传您的面部照片，利用领先的计算机视觉技术，瞬间解析毛孔、细纹、色素沉淀等肌肤深层秘密。
-            </p>
-            <span className="text-blue-400 font-medium text-sm flex items-center gap-1 mt-auto relative z-10">
-              {user ? '立即拍摄' : '请先登录'} <ChevronRight size={16} />
-            </span>
-          </button>
 
-          {/* AI 问卷测肤 (放到右侧) */}
-          <button 
-            onClick={() => setQuizMode('questionnaire')}
-            className="group flex flex-col items-center bg-white p-8 rounded-3xl shadow-sm border border-neutral-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden"
-          >
-            <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-              <Sparkles className="w-8 h-8" />
+        <div className="max-w-md w-full space-y-4">
+          {/* 第一步：DermiVue 图像测肤 */}
+          <div className={`rounded-3xl p-6 border-2 transition-all ${skinResult ? 'border-emerald-300 bg-emerald-50/40' : 'border-stone-200 bg-white'}`}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-stone-900 text-white flex items-center justify-center text-sm font-bold shrink-0">1</div>
+              <h2 className="text-xl font-serif text-stone-900">{copy.photoTitle}</h2>
             </div>
-            <h2 className="text-2xl font-serif text-stone-900 mb-3 w-full text-center">AI 深度问卷测肤</h2>
-            <p className="text-stone-500 text-sm text-center mb-6">
-              通过一系列专业护肤问题，结合您的年龄、肤质与核心诉求，由 AI 顾问为您匹配最佳组合。
-            </p>
-            <span className="text-rose-500 font-medium text-sm flex items-center gap-1 mt-auto">
-              开始问卷 <ChevronRight size={16} />
-            </span>
-          </button>
+            <p className="text-stone-500 text-sm mb-5">{copy.photoBody}</p>
+            {skinResult ? (
+              <button onClick={() => navigate('/skin-analysis')} className="w-full py-3 rounded-full border-2 border-stone-900 text-stone-900 font-medium hover:bg-stone-50 transition-colors">
+                已完成 ✓ 重新拍摄
+              </button>
+            ) : (
+              <button onClick={() => navigate('/skin-analysis')} className="w-full py-3 rounded-full bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors">
+                开始图像测肤
+              </button>
+            )}
+          </div>
+
+          {/* 第二步：AI 深度问卷 */}
+          <div className={`rounded-3xl p-6 border-2 transition-all ${skinResult ? 'border-stone-200 bg-white' : 'border-stone-200 bg-white opacity-60'}`}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-stone-900 text-white flex items-center justify-center text-sm font-bold shrink-0">2</div>
+              <h2 className="text-xl font-serif text-stone-900">{copy.questionnaireTitle}</h2>
+            </div>
+            <p className="text-stone-500 text-sm mb-5">{copy.questionnaireBody}</p>
+            {skinResult ? (
+              <button onClick={() => setQuizMode('questionnaire')} className="w-full py-3 rounded-full bg-stone-900 text-white font-medium hover:bg-stone-800 transition-colors">
+                开始问卷测肤
+              </button>
+            ) : (
+              <div className="w-full py-3 rounded-full bg-stone-100 text-stone-400 font-medium text-center">
+                请先完成第一步图像测肤
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -208,17 +411,38 @@ export default function QuizPage() {
             <Sparkles className="text-white w-8 h-8" />
           </div>
         </div>
-        <h2 className="text-2xl font-serif text-stone-800 mb-2">{t('auto_quizpage_270', t('auto_quizpage_270', 'TRASOCHY AI 正在为您分析'))}</h2>
-        <p className="text-stone-500 text-sm">{t('auto_quizpage_271', t('auto_quizpage_271', '匹配全球顶尖院线护肤方案...'))}</p>
+        <h2 className="text-2xl font-serif text-stone-800 mb-2">{copy.loadingTitle}</h2>
+        <p className="text-stone-500 text-sm">{copy.loadingBody}</p>
       </div>
     );
   }
 
   if (results.length > 0) {
+    // 强制登录控制
+    if (settings.quiz_require_login_for_result === '1' && !user) {
+      return (
+        <div className="max-w-md mx-auto px-4 py-20 text-center">
+          <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Sparkles className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-serif text-stone-900 mb-3">您的专属护肤方案已就绪</h2>
+          <p className="text-stone-500 text-sm mb-8 leading-relaxed">
+            AI 护肤顾问已完成对您肤质与诉求的深度解析。请登录或注册账号后查看量身定制的护肤方案与专属守护信。
+          </p>
+          <button
+            onClick={() => navigate('/login')}
+            className="w-full py-3.5 bg-stone-900 text-white rounded-full font-medium hover:bg-stone-800 transition-colors flex items-center justify-center gap-2 shadow-lg"
+          >
+            <LogIn size={16} /> 登录以查看我的方案
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-5xl mx-auto px-4 py-12">
         <div className="text-center mb-12">
-          <h1 className="text-3xl md:text-4xl font-serif text-stone-900 mb-4">{t('auto_quizpage_272', t('auto_quizpage_272', '为您定制的护肤方案'))}</h1>
+          <h1 className="text-3xl md:text-4xl font-serif text-stone-900 mb-4">{copy.resultTitle}</h1>
           {guardianLetter ? (
             <div className="bg-rose-50/50 p-8 rounded-3xl border border-rose-100 mb-12 text-left max-w-3xl mx-auto relative">
               <div className="absolute top-4 left-4 text-rose-200">
@@ -228,12 +452,12 @@ export default function QuizPage() {
                 {guardianLetter}
               </p>
               <div className="text-right mt-6 text-rose-400 font-serif text-sm">
-                {t('auto_quizpage_273', '— TRASOCHY AI 护肤顾问')}
+                {copy.resultSignature}
               </div>
             </div>
           ) : (
             <p className="text-stone-500 max-w-2xl mx-auto">
-              {t('auto_quizpage_274', '基于您的肤质与核心诉求，我们的 AI 为您甄选了以下院线级护肤组合。持续使用 28 天，见证肌肤新生。')}
+              {copy.resultBody}
             </p>
           )}
         </div>
@@ -243,7 +467,7 @@ export default function QuizPage() {
             <div key={product.id} className="bg-white p-6 rounded-2xl shadow-sm border border-rose-50 hover:shadow-xl transition-shadow cursor-pointer relative overflow-hidden group" onClick={() => navigate(`/products/${product.slug}`)}>
               {idx === 0 && (
                 <div className="absolute top-0 left-0 bg-rose-500 text-white text-[10px] px-3 py-1 font-bold tracking-wider rounded-br-xl z-10">
-                  {t('auto_quizpage_275', 'TOP 匹配')}
+                  {copy.topMatch}
                 </div>
               )}
               <div className="aspect-square rounded-xl overflow-hidden mb-6 bg-stone-50">
@@ -261,9 +485,67 @@ export default function QuizPage() {
           ))}
         </div>
 
-        <div className="mt-16 text-center">
-          <button onClick={resetQuiz} className="inline-flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors">
-            <RefreshCcw size={16} /> {t('auto_quizpage_276', '重新测试')}
+        {/* 一键加购与前往问卷调查领券 */}
+        <div className="mt-12 max-w-lg mx-auto space-y-4">
+          <button
+            type="button"
+            disabled={addingToCart}
+            onClick={async () => {
+              if (!user) {
+                toast.error('请先登录后再加购');
+                navigate('/login?redirect=/quiz');
+                return;
+              }
+              if (!results || results.length === 0) return;
+              setAddingToCart(true);
+              try {
+                for (const p of results) {
+                  await api.post('/cart', { productId: p.id, quantity: 1 });
+                }
+                setAddedToCart(true);
+                toast.success('已将 AI 推荐方案全部加入购物车！');
+              } catch (e: any) {
+                toast.error('加购失败: ' + (e?.message || '未知错误'));
+              } finally {
+                setAddingToCart(false);
+              }
+            }}
+            className={`w-full py-3.5 px-6 rounded-xl font-medium text-xs tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${
+              addedToCart 
+                ? 'bg-emerald-600 text-white'
+                : 'bg-stone-900 hover:bg-stone-800 text-white'
+            }`}
+          >
+            {addedToCart ? (
+              <>
+                <Check size={16} /> 已全部加入购物车
+              </>
+            ) : (
+              <>
+                <ShoppingCart size={16} /> {addingToCart ? '正在加入购物车...' : '一键将 AI 推荐方案加入购物车'}
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => navigate('/survey')}
+            className="w-full py-4 bg-gradient-to-r from-rose-500 to-rose-600 text-white rounded-xl font-bold text-xs hover:from-rose-600 hover:to-rose-700 transition-all flex items-center justify-center gap-2 tracking-widest shadow-lg"
+          >
+            <Gift size={16} /> 完成调研问卷，领取专属代金券 <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* AI 测肤与推荐合规免责声明 */}
+        <div className="mt-8 bg-stone-50 border border-stone-200/80 rounded-2xl p-4 text-[11px] text-stone-500 leading-relaxed text-left max-w-lg mx-auto space-y-1">
+          <p className="font-semibold text-stone-700">⚠️【AI 测肤与推荐免责声明】</p>
+          <p>
+            本功能提供的肤质分析、状态评估与产品推荐仅基于用户输入或图像特征生成的<b>日常个人护理建议</b>，不属于医疗诊断行为，不构成任何医疗诊断结论、处方或疾病治疗方案。若您的皮肤存在红肿、破损、过敏或病理症状，请务必咨询专业皮肤科医师或前往正规医疗机构就诊。
+          </p>
+        </div>
+
+        <div className="mt-6 text-center">
+          <button onClick={resetQuiz} className="inline-flex items-center gap-2 text-stone-400 hover:text-stone-700 text-xs transition-colors">
+            <RefreshCcw size={14} /> {copy.retest}
           </button>
         </div>
       </div>
@@ -279,13 +561,13 @@ export default function QuizPage() {
         {/* Progress */}
         <div className="mb-12">
           <div className="flex justify-between text-xs text-stone-400 mb-2">
-            <span>{isDispatchStep ? t('auto_quizpage_306', '分析中转站') : `问题 ${currentStep + 1} / ${Math.max(10, allQuestions.length)}`}</span>
-            <span>{isDispatchStep && allQuestions.length >= 10 ? '100%' : `${Math.round(((currentStep + 1) / 10) * 100)}%`}</span>
+            <span>{isDispatchStep ? copy.dispatch : copy.questionProgress(currentStep + 1, Math.max(maxAllowedTotal, allQuestions.length))}</span>
+            <span>{isDispatchStep && allQuestions.length >= maxAllowedTotal ? '100%' : `${Math.round(((currentStep + 1) / Math.max(1, maxAllowedTotal)) * 100)}%`}</span>
           </div>
           <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
             <div 
               className="h-full bg-stone-900 transition-all duration-500 ease-out"
-              style={{ width: isDispatchStep && allQuestions.length >= 10 ? '100%' : `${((currentStep + 1) / 10) * 100}%` }}
+              style={{ width: isDispatchStep && allQuestions.length >= maxAllowedTotal ? '100%' : `${((currentStep + 1) / Math.max(1, maxAllowedTotal)) * 100}%` }}
             />
           </div>
         </div>
@@ -301,34 +583,34 @@ export default function QuizPage() {
                     <Sparkles className="text-white w-5 h-5" />
                   </div>
                 </div>
-                <h3 className="text-xl font-serif text-stone-800">{t('auto_quizpage_277', t('auto_quizpage_277', 'AI 正在思考追问...'))}</h3>
+                <h3 className="text-xl font-serif text-stone-800">{copy.aiThinking}</h3>
               </div>
             ) : (
               <>
                 <h2 className="text-3xl md:text-4xl font-serif text-stone-900 mb-6">
-                  {allQuestions.length < 10 ? t('auto_quizpage_307', '是否需要更精准的方案？') : t('auto_quizpage_308', '问卷已全部完成')}
+                  {allQuestions.length < maxAllowedTotal && maxDynamic > 0 ? copy.needMore : copy.complete}
                 </h2>
                 <p className="text-stone-500 mb-12 max-w-lg mx-auto">
-                  {allQuestions.length < 10 
-                    ? `当前已完成 ${allQuestions.length} 道题目。您可以选择直接生成专属护肤方案，或者让 AI 护肤顾问对您的肌肤情况进行深入追问。`
-                    : `您已经完成了 10 道题目的深度测肤，AI 顾问已经完全掌握了您的肌肤档案！`
+                  {allQuestions.length < maxAllowedTotal && maxDynamic > 0
+                    ? copy.partialText(allQuestions.length)
+                    : copy.completeText
                   }
                 </p>
 
                 <div className="flex flex-col gap-4 w-full max-w-md">
-                  {allQuestions.length < 10 && (
+                  {allQuestions.length < maxAllowedTotal && maxDynamic > 0 && (
                     <button
                       onClick={fetchNextQuestion}
                       className="w-full py-4 bg-white border-2 border-stone-900 text-stone-900 rounded-full font-medium hover:bg-stone-50 transition-colors flex items-center justify-center gap-2"
                     >
-                      <Sparkles size={18} /> 让 AI 动态追问 (还剩 {10 - allQuestions.length} 题)
+                      <Sparkles size={18} /> {copy.askMore(maxAllowedTotal - allQuestions.length)}
                     </button>
                   )}
                   <button
                     onClick={() => submitQuiz(answers)}
                     className="w-full py-4 bg-stone-900 text-white rounded-full font-medium hover:bg-stone-800 transition-colors tracking-widest shadow-lg"
                   >
-                    {t('auto_quizpage_278', '直接生成专属报告')}
+                    {copy.generateReport}
                   </button>
                 </div>
               </>

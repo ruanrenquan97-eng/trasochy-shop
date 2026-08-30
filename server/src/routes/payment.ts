@@ -186,7 +186,7 @@ router.get('/query/:orderNo', authMiddleware, async (req: Request, res: Response
 });
 
 // ============ 退款 ============
-router.post('/refund/:orderNo', staffMiddleware, permissionMiddleware('orders'), async (req: Request, res: Response) => {
+router.post('/refund/:orderNo', authMiddleware, staffMiddleware, permissionMiddleware('orders'), async (req: Request, res: Response) => {
   try {
     const orderNo = String(req.params.orderNo);
     const { reason } = req.body || {};

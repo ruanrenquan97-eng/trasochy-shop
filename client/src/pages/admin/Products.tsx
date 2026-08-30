@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Plus, Search, Edit2, Trash2, X, Upload, ImageIcon, Bot, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -58,6 +58,8 @@ export default function AdminProducts() {
   const [langTab, setLangTab] = useState('zh');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [openGallery, setOpenGallery] = useState(false);
+  const [galleryTarget, setGalleryTarget] = useState<'mainImage' | 'gallery'>('mainImage');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
@@ -432,11 +434,11 @@ export default function AdminProducts() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('确认下架此商品？')) return;
+    if (!confirm('确认删除此商品？此操作不可恢复！')) return;
     try {
       await api.delete(`/admin/products/${id}`);
       qc.invalidateQueries({ queryKey: ['admin-products'] });
-      toast.success('已下架');
+      toast.success('已删除');
     } catch (e: any) { toast.error(e.message); }
   };
 
@@ -550,6 +552,17 @@ export default function AdminProducts() {
                     </td>
                     <td className="px-4 py-3 flex items-center gap-2">
                       <button 
+                        onClick={() => handleQuickEdit(product.id, { isActive: !product.is_active })}
+                        title={product.is_active ? '点击下架' : '点击上架'}
+                        className={`text-xs px-2 py-1 rounded-full transition-colors ${
+                          product.is_active 
+                            ? 'bg-green-50 text-green-600 hover:bg-green-100' 
+                            : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                        }`}
+                      >
+                        {product.is_active ? '上架中' : '已下架'}
+                      </button>
+                      <button 
                         onClick={() => translateRowMutation.mutate(product)} 
                         disabled={translateRowMutation.isPending && translateRowMutation.variables?.id === product.id}
                         title="一键同步双语翻译"
@@ -625,10 +638,19 @@ export default function AdminProducts() {
                   </div>
                   <div>
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUploadMainImage} className="hidden" />
-                    <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                      className="btn-outline text-xs py-2 px-3 flex items-center gap-1.5">
-                      <Upload size={12} /> {uploading ? '上传中...' : '上传主图'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                        className="btn-outline text-xs py-2 px-3 flex items-center gap-1.5">
+                        <Upload size={12} /> {uploading ? '上传中...' : '上传主图'}
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); setGalleryTarget('mainImage'); setOpenGallery(true); }}
+                        className="px-3 py-2 border border-purple-200 text-purple-600 rounded-xl text-xs hover:bg-purple-50 flex items-center gap-1.5 transition-colors font-medium"
+                      >
+                        <Bot size={12} /> 选择 AI 绘图
+                      </button>
+                    </div>
                     {form.mainImage && (
                       <button onClick={() => setForm(f => ({ ...f, mainImage: '' }))}
                         className="text-xs text-stone-400 hover:text-rose-500 ml-2">移除</button>
@@ -658,10 +680,27 @@ export default function AdminProducts() {
                     </div>
                   ))}
                   {form.images.length < 5 && (
-                    <button onClick={() => multiFileInputRef.current?.click()} disabled={uploading}
-                      className="w-16 h-16 border border-dashed border-stone-300 rounded-lg flex items-center justify-center text-stone-300 hover:border-stone-500 hover:text-stone-500 transition-colors">
-                      <Upload size={14} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => multiFileInputRef.current?.click()} 
+                        disabled={uploading}
+                        title="从本地上传图片"
+                        className="w-16 h-16 border border-dashed border-stone-300 rounded-lg flex flex-col items-center justify-center text-stone-400 hover:border-stone-500 hover:text-stone-500 hover:bg-stone-50/50 transition-all"
+                      >
+                        <Upload size={14} />
+                        <span className="text-[9px] mt-1">本地上传</span>
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); setGalleryTarget('gallery'); setOpenGallery(true); }}
+                        title="从即梦 AI 素材库选择"
+                        className="w-16 h-16 border border-dashed border-purple-200 rounded-lg flex flex-col items-center justify-center text-purple-500 hover:border-purple-400 hover:bg-purple-50/50 transition-all font-medium"
+                      >
+                        <Bot size={14} />
+                        <span className="text-[9px] mt-1">AI 绘图</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -992,6 +1031,154 @@ export default function AdminProducts() {
           </div>
         </div>
       )}
+
+      {/* Dreamina AI Gallery Selector Modal */}
+      <DreaminaGalleryModal
+        isOpen={openGallery}
+        onClose={() => setOpenGallery(false)}
+        onSelect={(url) => {
+          if (galleryTarget === 'mainImage') {
+            setForm(f => ({ ...f, mainImage: url }));
+          } else {
+            setForm(f => ({ ...f, images: [...f.images, url] }));
+          }
+          setOpenGallery(false);
+        }}
+      />
     </div>
   );
 }
+
+interface DreaminaGalleryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelect: (url: string) => void;
+}
+
+function DreaminaGalleryModal({ isOpen, onClose, onSelect }: DreaminaGalleryModalProps) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchTasks = async () => {
+    setLoading(true);
+    try {
+      const res: any = await api.get('/ai/dreamina/tasks');
+      // Filter tasks that generated images successfully
+      const successfulTasks = (res || []).filter(
+        (t: any) => t.status === 'success' && t.result_urls?.length > 0
+      );
+      setTasks(successfulTasks);
+    } catch (e: any) {
+      toast.error('获取即梦素材库失败: ' + (e.message || '网络错误'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchTasks();
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  // Flatten all successfully generated images with their corresponding prompt and metadata
+  const galleryItems = tasks.flatMap(task => 
+    (task.result_urls || []).map((url: string, idx: number) => ({
+      url,
+      prompt: task.prompt,
+      submitId: task.submit_id,
+      index: idx,
+      createdAt: task.created_at,
+      userName: task.user_name || '系统运营'
+    }))
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200" onClick={onClose}>
+      <div 
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col border border-stone-100 animate-in zoom-in-95 duration-200" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center bg-stone-50/50 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+              <Bot size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-stone-800">即梦 AI 绘图素材库</h2>
+              <p className="text-[11px] text-stone-400">选择您在后台利用即梦大模型生成的高端视觉图像</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={fetchTasks} 
+              disabled={loading} 
+              title="刷新素材"
+              className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-500 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={onClose} className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 hover:text-stone-600 transition-colors">✕</button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto flex-1 bg-stone-50/30">
+          {loading ? (
+            <div className="h-64 flex flex-col items-center justify-center gap-3 text-stone-400">
+              <RefreshCw size={24} className="animate-spin text-purple-600" />
+              <span className="text-sm font-medium">正在读取即梦绘图资产...</span>
+            </div>
+          ) : galleryItems.length === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-white rounded-xl border border-dashed border-stone-200">
+              <ImageIcon size={32} className="text-stone-300 mb-2" />
+              <h3 className="text-sm font-bold text-stone-700">暂无 AI 生成素材</h3>
+              <p className="text-xs text-stone-400 mt-1 max-w-xs leading-normal">
+                系统中还没有成功生成的即梦 AI 图像。您可以前往 “AI 大脑系统 - 抖音即梦” 标签页开始您的第一笔创作！
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {galleryItems.map((item, idx) => (
+                <div 
+                  key={idx}
+                  onClick={() => {
+                    onSelect(item.url);
+                  }}
+                  className="bg-white border border-stone-100 rounded-xl overflow-hidden shadow-xs hover:shadow-md hover:border-purple-300 group cursor-pointer transition-all duration-200 aspect-square flex flex-col relative"
+                >
+                  {/* Image container */}
+                  <div className="flex-1 overflow-hidden bg-stone-50 relative flex items-center justify-center">
+                    <img 
+                      src={item.url} 
+                      alt={item.prompt} 
+                      className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-sm">点击选择</span>
+                    </div>
+                  </div>
+
+                  {/* Info overlay/bottom sheet */}
+                  <div className="p-2 border-t border-stone-100 bg-white shrink-0">
+                    <p className="text-[10px] text-stone-700 font-medium line-clamp-2 leading-snug" title={item.prompt}>
+                      {item.prompt}
+                    </p>
+                    <div className="flex justify-between items-center mt-1.5 text-[9px] text-stone-400">
+                      <span>{item.userName}</span>
+                      <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

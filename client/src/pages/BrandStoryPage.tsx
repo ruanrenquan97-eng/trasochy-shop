@@ -44,13 +44,14 @@ export default function BrandStoryPage() {
   const [activeTab, setActiveTab] = useState<'story' | 'founder' | 'tech'>('story');
   const [selectedPaper, setSelectedPaper] = useState<AcademicPaper | null>(null);
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
+  const currentLang = (i18n.resolvedLanguage || i18n.language || 'zh').split('-')[0];
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   const { data: settingsData, isLoading } = useQuery({
-    queryKey: ['publicSettings'],
+    queryKey: ['publicSettings', currentLang],
     queryFn: async () => {
       const res = await api.get('/settings');
       return res;
@@ -82,8 +83,6 @@ export default function BrandStoryPage() {
     if (settingsData?.brand_awards) awards = JSON.parse(settingsData.brand_awards);
   } catch (e) { awards = []; }
 
-  const currentLang = i18n.language || 'zh';
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
       {/* Hero Section */}
@@ -105,7 +104,7 @@ export default function BrandStoryPage() {
             {settingsData?.bs_hero_title || t('auto_brandstorypage_72', '中国好成分')} <span className="mx-2 text-white/50">•</span> {settingsData?.bs_hero_subtitle || t('auto_brandstorypage_73', '透皮好吸收')}
           </h1>
           <p className="text-base md:text-lg text-slate-200 font-light max-w-2xl mx-auto leading-relaxed">
-            {settingsData?.bs_hero_desc || t('auto_brandstorypage_74', '全球生物透皮递送技术领导者')}
+            {settingsData?.bs_hero_desc || t('auto_brandstorypage_74', '专注于生物透皮递送技术创新')}
           </p>
         </div>
       </section>
@@ -270,7 +269,7 @@ export default function BrandStoryPage() {
               <div className="bg-white rounded-3xl p-8 md:p-12 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row items-center gap-12">
                 <div className="md:w-1/2">
                   <h3 className="text-2xl font-bold text-slate-800 mb-6 leading-snug">
-                    {settingsData?.bs_sec1_subtitle || t('auto_brandstorypage_76', '依托领先的生物透皮技术与绿色合成生物制造')}
+                    {settingsData?.bs_sec1_subtitle || t('auto_brandstorypage_76', '依托先进的生物透皮技术与绿色合成生物制造')}
                   </h3>
                   <p className="text-slate-600 leading-relaxed mb-6">
                     {settingsData?.bs_sec1_desc || t('auto_brandstorypage_77', '美尔健生物 是一家专注新型生物功效活性材料开发、制造与整体方案输出的国家高新科技企业。我们以生物科技为核心，专注于活性成分与透皮递送技术的研发与产业化，构建从分子设计、原料制造到应用解决方案的完整能力体系，为全球品牌提供可信赖的技术支持。')}
@@ -329,7 +328,7 @@ export default function BrandStoryPage() {
                     },
                     {
                       title: settingsData?.bs_tech2_title || t('auto_brandstorypage_92', '生物透皮递送'),
-                      desc: settingsData?.bs_tech2_desc || t('auto_brandstorypage_93', '全球领先的cTDP促渗透机理，解决大分子难穿过角质层致密“砖墙结构”的行业难题，让活性物深层起效。'),
+                      desc: settingsData?.bs_tech2_desc || t('auto_brandstorypage_93', '自主创新的cTDP促渗透机理，解决大分子难穿过角质层致密“砖墙结构”的行业难题，让活性物深层起效。'),
                       icon: <Dna className="w-8 h-8 text-purple-500" />
                     },
                     {
@@ -382,7 +381,7 @@ export default function BrandStoryPage() {
                   <h2 className="text-3xl font-bold text-slate-900 mb-4">{t('auto_brandstory_awards_title', '行业大奖')}</h2>
                   <div className="w-16 h-1 bg-amber-500 mx-auto rounded-full mb-6"></div>
                   <p className="text-slate-600 max-w-2xl mx-auto">
-                    {t('auto_brandstory_awards_desc', '我们的技术与产品获得了行业权威机构的认可与奖励')}
+                    {t('auto_brandstory_awards_desc', '我们的技术与产品获得了行业专业机构的认可与荣誉')}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">

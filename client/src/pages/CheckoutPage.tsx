@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuthStore } from '../contexts/authStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, Wallet, MapPin, Plus, Check, Loader2, Coins } from 'lucide-react';
+import { CreditCard, Wallet, MapPin, Plus, Check, Loader2, Coins, Gift } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { isWechatBrowser, submitAlipayForm, openWechatH5 } from '../utils/usePayment';
@@ -15,7 +15,7 @@ export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { items, subtotal: stateSubtotal, promoDiscount: statePromoDiscount, total, pointsTotal } = location.state || {};
+  const { items, subtotal: stateSubtotal, promoDiscount: statePromoDiscount, total, pointsTotal, preSelectProductId, selectedIds: stateSelectedIds } = location.state || {};
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -31,6 +31,16 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const [isGift, setIsGift] = useState(false);
+  // 代金券
+  const [couponCode, setCouponCode] = useState('');
+  const [couponValidating, setCouponValidating] = useState(false);
+  const [couponInfo, setCouponInfo] = useState<{ code: string; value: number; type: string; minAmount: number } | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponError, setCouponError] = useState('');
+  const [myCoupons, setMyCoupons] = useState<any[]>([]);
+  const [couponsLoading, setCouponsLoading] = useState(true);
+  // Quantity overrides for cart items at checkout (e.g., when "Buy Now" added an extra copy of a product already in cart)
+  const [quantityOverrides, setQuantityOverrides] = useState<Map<number, number>>(new Map());
   const [giftMessage, setGiftMessage] = useState('');
   
   // QR Code Payment Modal State
@@ -78,8 +88,86 @@ export default function CheckoutPage() {
   const { data: cartData } = useQuery({
     queryKey: ['cart'],
     queryFn: () => api.get('/cart'),
-    enabled: !items,
   }) as any;
+
+  // 购物车商品勾选状态
+  const [selectedCartItemIds, setSelectedCartItemIds] = useState<Set<number>>(new Set());
+  const cartItems: any[] = cartData?.items || [];
+
+  // 根据来源初始化勾选 —— preSelectProductId 优先，否则 selectedIds，否则全不选
+  const [cartInitDone, setCartInitDone] = useState(false);
+  useEffect(() => {
+    if (cartInitDone || cartItems.length === 0) return;
+    setCartInitDone(true);
+    if (preSelectProductId) {
+      setSelectedCartItemIds(new Set(
+        cartItems.filter((i: any) => i.product_id === preSelectProductId).map((i: any) => i.id)
+      ));
+    } else if (stateSelectedIds) {
+      setSelectedCartItemIds(new Set(stateSelectedIds));
+    }
+  }, [cartItems, cartInitDone, preSelectProductId, stateSelectedIds]);
+
+  // 如果 cartData 有更新（如立购后将商品加到了购物车），但初始化已跑过
+  // 且 preSelectProductId 还没匹配 — 等下一轮 cartData 刷新后再试
+  useEffect(() => {
+    if (!cartInitDone || cartItems.length === 0 || !preSelectProductId) return;
+    const alreadyHas = cartItems.some((i: any) => i.product_id === preSelectProductId && selectedCartItemIds.has(i.id));
+    if (alreadyHas) return;
+    // 商品刚出现在购物车中，补选
+    const match = cartItems.find((i: any) => i.product_id === preSelectProductId);
+    if (match && !selectedCartItemIds.has(match.id)) {
+      setSelectedCartItemIds(prev => {
+        const next = new Set(prev);
+        next.add(match.id);
+        return next;
+      });
+    }
+  }, [cartItems, cartInitDone, preSelectProductId, selectedCartItemIds]);
+
+  const toggleCartItem = (id: number) => {
+    setSelectedCartItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Get effective quantity (override if adjusted, otherwise cart quantity)
+  const getQty = (item: any) => quantityOverrides.get(item.id) ?? item.quantity;
+
+  // Adjust quantity of a cart item at checkout (±1)
+  const adjustQty = async (item: any, delta: number) => {
+    const current = getQty(item);
+    const next = current + delta;
+    if (next < 1) return;
+    // Update local immediately for responsive UI
+    setQuantityOverrides(prev => {
+      const n = new Map(prev);
+      n.set(item.id, next);
+      return n;
+    });
+    // Sync to cart API
+    try {
+      await api.put(`/cart/${item.id}`, { quantity: next });
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+    } catch (e: any) {
+      toast.error('调整数量失败');
+      // Revert on failure
+      setQuantityOverrides(prev => {
+        const n = new Map(prev);
+        n.set(item.id, current);
+        return n;
+      });
+    }
+  };
+
+  // 已勾选的购物车商品
+  const selectedCartItems = useMemo(
+    () => cartItems.filter((i: any) => selectedCartItemIds.has(i.id)),
+    [cartItems, selectedCartItemIds]
+  );
 
   const { data: samplesData } = useQuery({
     queryKey: ['samples'],
@@ -112,21 +200,65 @@ export default function CheckoutPage() {
 
   const selectedAddr = addresses?.find((a: any) => a.id === selectedAddrId);
 
-  const baseOrderItems = items || cartData?.items?.map((i: any) => ({ productId: i.product_id, quantity: i.quantity })) || [];
+  const baseOrderItems = [
+    // 来自 ProductDetailPage 的直接购买（订阅/积分兑换等）
+    ...(items || []),
+    // 来自购物车的已勾选商品
+    ...selectedCartItems.map((i: any) => ({ productId: i.product_id, quantity: quantityOverrides.get(i.id) ?? i.quantity }))
+  ];
   const orderItems = [
     ...baseOrderItems,
     ...selectedSamples.map(id => ({ productId: id, quantity: 1, isSample: true }))
   ];
   
-  const orderTotal = total || cartData?.total || 0;
-  const orderSubtotal = stateSubtotal || cartData?.subtotal || orderTotal;
-  const promoDiscount = statePromoDiscount || cartData?.promoDiscount || 0;
+  const orderSubtotal = selectedCartItems.reduce((sum: number, i: any) => sum + (i.unit_price * (quantityOverrides.get(i.id) ?? i.quantity) || 0), 0);
+  const cartSubtotal = cartItems.reduce((sum: number, i: any) => sum + (i.subtotal || i.unit_price * i.quantity || 0), 0);
+  const promoDiscount = useMemo(() => {
+    if (cartSubtotal === 0 || (cartData?.promoDiscount || 0) === 0) return 0;
+    const ratio = orderSubtotal / cartSubtotal;
+    return (cartData?.promoDiscount || 0) * ratio;
+  }, [orderSubtotal, cartSubtotal, cartData?.promoDiscount]);
+  // total: 来自 state（订阅/积分兑换等）或从购物车计算
+  const orderTotal = (total !== undefined ? total : 0) + orderSubtotal - promoDiscount;
   
   const pointsToUseRatio = parseInt(settings?.points_to_money_ratio || '100', 10);
   const pointsToUse = parseInt(usePoints || '0', 10);
   const discountAmount = Math.floor(pointsToUse / pointsToUseRatio);
   const giftWrapFee = isGift ? 15 : 0;
-  const finalAmount = isPointsRedemption ? 0 : Math.max(0, orderTotal + giftWrapFee - discountAmount);
+  const finalAmount = isPointsRedemption ? 0 : Math.max(0, orderTotal + giftWrapFee - discountAmount - couponDiscount);
+
+  // 加载我的代金券列表
+  useEffect(() => {
+    api.get('/coupons/my').then((res: any) => {
+      setMyCoupons(res.coupons || []);
+    }).catch(() => {}).finally(() => setCouponsLoading(false));
+  }, []);
+
+  const availableCoupons = useMemo(() => {
+    const now = Date.now();
+    return (myCoupons || []).filter((c: any) =>
+      c.status === 'unused' && c.expires_at > now && (c.min_amount <= 0 || orderTotal >= c.min_amount)
+    );
+  }, [myCoupons, orderTotal]);
+
+  const applyCoupon = async (coupon: any) => {
+    setCouponValidating(true);
+    setCouponError('');
+    try {
+      const res: any = await api.post('/coupons/validate', {
+        code: coupon.code,
+        orderAmount: orderTotal,
+      });
+      setCouponCode(res.coupon.code);
+      setCouponInfo(res.coupon);
+      setCouponDiscount(res.discountValue);
+      toast.success(`代金券已应用，抵扣 ¥${res.discountValue.toFixed(2)}`);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || '验证失败';
+      setCouponError(msg);
+    }
+    setCouponValidating(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,7 +298,8 @@ export default function CheckoutPage() {
         isPointsRedemption,
         isGift,
         giftMessage,
-        giftWrapFee
+        giftWrapFee,
+        couponCode: couponCode || undefined,
       });
 
       const { orderNo } = result;
@@ -415,6 +548,58 @@ export default function CheckoutPage() {
             )}
           </div>
 
+          {/* 购物车商品选择 */}
+          {!isPointsRedemption && cartItems.length > 0 && (
+            <div className="card p-6">
+              <h2 className="text-xs font-semibold text-stone-900 mb-5 tracking-widest uppercase">结算商品</h2>
+              <p className="text-xs text-stone-400 mb-4">请勾选本次需结算的商品（已选 {selectedCartItems.length}/{cartItems.length} 件）</p>
+              <div className="space-y-3">
+                {cartItems.map((item: any) => {
+                  const isSelected = selectedCartItemIds.has(item.id);
+                  const displayQty = getQty(item);
+                  return (
+                    <label key={item.id} className={`flex items-center gap-3 p-3 border cursor-pointer transition-all rounded-lg ${
+                      isSelected ? 'border-stone-900 bg-stone-50' : 'border-stone-200 bg-white opacity-60 hover:opacity-80'
+                    }`}>
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                        isSelected ? 'bg-stone-900 border-stone-900' : 'border-stone-300'
+                      }`}>
+                        {isSelected && <Check size={12} className="text-white" />}
+                      </div>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleCartItem(item.id)} className="hidden" />
+                      <div className="w-12 h-12 bg-stone-50 rounded overflow-hidden flex-shrink-0">
+                        {item.main_image ? (
+                          <img src={item.main_image} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-stone-200 text-lg">◆</div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-stone-800 line-clamp-1">{item.name}</p>
+                        <p className="text-xs text-stone-400 mt-0.5">¥{item.unit_price?.toFixed(2)} × {displayQty}</p>
+                      </div>
+                      {/* 数量加减按钮 —— 防止点了按钮触发 label 的勾选切换 */}
+                      <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.preventDefault()}>
+                        <button type="button" disabled={displayQty <= 1}
+                          onClick={(e) => { e.stopPropagation(); adjustQty(item, -1); }}
+                          className="w-6 h-6 rounded border border-stone-300 flex items-center justify-center text-stone-500 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed text-sm leading-none">
+                          −
+                        </button>
+                        <span className="text-xs font-medium text-stone-800 w-6 text-center tabular-nums">{displayQty}</span>
+                        <button type="button"
+                          onClick={(e) => { e.stopPropagation(); adjustQty(item, 1); }}
+                          className="w-6 h-6 rounded border border-stone-300 flex items-center justify-center text-stone-500 hover:bg-stone-100 text-sm leading-none">
+                          +
+                        </button>
+                      </div>
+                      <span className="text-sm font-semibold text-stone-900 flex-shrink-0 ml-1">¥{(item.unit_price * displayQty).toFixed(2)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* 支付方式 */}
           <div className="card p-6">
             {!isPointsRedemption && (
@@ -529,13 +714,85 @@ export default function CheckoutPage() {
 
         {/* 订单汇总 */}
         <div>
+          {/* 代金券输入 */}
+          {!isPointsRedemption && (
+            <div className="card p-5 mb-4">
+              <h2 className="text-xs font-semibold text-stone-900 mb-3 tracking-widest uppercase flex items-center gap-2">
+                <Gift size={13} /> 代金券
+              </h2>
+              {couponInfo ? (
+                <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="text-sm font-mono font-bold text-emerald-700 tracking-widest">{couponInfo.code}</p>
+                    <p className="text-xs text-emerald-500 mt-0.5">
+                      {couponInfo.type === 'fixed' ? `立减¥${couponInfo.value}` : `打${(couponInfo.value * 10).toFixed(1)}折`}
+                      {couponInfo.minAmount > 0 ? `（满¥${couponInfo.minAmount}可用）` : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponCode('');
+                      setCouponInfo(null);
+                      setCouponDiscount(0);
+                      setCouponError('');
+                    }}
+                    className="text-xs text-stone-400 hover:text-stone-700 transition-colors px-2 py-1 rounded-lg hover:bg-stone-100"
+                  >
+                    移除
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+  {couponsLoading ? (
+    <div className="flex items-center gap-2 text-xs text-stone-400 py-2">
+      <Loader2 className="w-3 h-3 animate-spin" /> 加载中...
+    </div>
+  ) : availableCoupons.length === 0 ? (
+    <p className="text-xs text-stone-400 py-2">暂无可用代金券</p>
+  ) : (
+    availableCoupons.map((c: any) => (
+      <button
+        key={c.id}
+        type="button"
+        disabled={couponValidating}
+        onClick={() => applyCoupon(c)}
+        className="w-full flex items-center justify-between p-3 border border-stone-200 rounded-xl hover:border-rose-300 hover:bg-rose-50/40 transition-colors disabled:opacity-50"
+      >
+        <div className="text-left">
+          <p className="text-base font-bold text-rose-600">
+            {c.type === 'fixed' ? `¥${c.value}` : `${(c.value * 10).toFixed(1)}折`}
+          </p>
+          <p className="text-xs text-stone-400 mt-0.5">
+            {c.min_amount > 0 ? `满¥${c.min_amount}可用` : '无门槛'} · 有效期至 {new Date(c.expires_at).toLocaleDateString('zh-CN')}
+          </p>
+        </div>
+        <span className="text-xs font-medium text-rose-500 shrink-0">使用</span>
+      </button>
+    ))
+  )}
+</div>              )}
+              {couponError && <p className="text-xs text-red-500 mt-2">{couponError}</p>}
+            </div>
+          )}
+
           <div className="card p-6 sticky top-20">
             <h2 className="text-xs font-semibold text-stone-900 mb-5 tracking-widest uppercase">{t('checkout.summary', 'Order Summary')}</h2>
             <div className="text-xs text-stone-400 mb-4 space-y-1">
               <p>{t('checkout.items_count', '{{count}} items', { count: orderItems.length })}</p>
             </div>
             
-            <div className="space-y-3 border-t border-stone-200 pt-4 mb-5">
+            {/* 已选商品列表 */}
+            {selectedCartItems.length > 0 && (
+              <div className="space-y-2 mb-4 text-xs">
+                {selectedCartItems.map((item: any) => (
+                  <div key={item.id} className="flex justify-between text-stone-500">
+                    <span className="line-clamp-1 flex-1 mr-2">{item.name} ×{getQty(item)}</span>
+                    <span>¥{(item.unit_price * getQty(item)).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}            <div className="space-y-3 border-t border-stone-200 pt-4 mb-5">
               {!isPointsRedemption ? (
                 <>
                   <div className="flex justify-between items-baseline text-sm text-stone-600">
@@ -558,6 +815,12 @@ export default function CheckoutPage() {
                     <div className="flex justify-between items-baseline text-sm text-rose-500">
                       <span>{t('checkout.points_deducted', 'Points Deducted (-{{points}} points)', { points: pointsToUse })}</span>
                       <span>-¥{discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {couponDiscount > 0 && (
+                    <div className="flex justify-between items-baseline text-sm text-emerald-600">
+                      <span>代金券抵扣</span>
+                      <span>-¥{couponDiscount.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-baseline pt-2">

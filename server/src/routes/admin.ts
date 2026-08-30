@@ -268,6 +268,15 @@ router.post('/categories', permissionMiddleware('products'), (req: Request, res:
 
 router.put('/categories/:id', permissionMiddleware('products'), (req: Request, res: Response) => {
   const { name, slug, description, image, sort_order, is_active, translations } = req.body;
+  // 支持部分更新（toggle 只传 is_active）
+  if (name === undefined && slug === undefined && description === undefined && image === undefined && sort_order === undefined && translations === undefined) {
+    try {
+      sqlite.prepare('UPDATE categories SET is_active=? WHERE id=?').run(is_active === undefined ? 1 : is_active, req.params.id);
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: '更新失败' });
+    }
+  }
   if (!name || !slug) return res.status(400).json({ error: '分类名称和别名必填' });
   const transStr = translations ? (typeof translations === 'string' ? translations : JSON.stringify(translations)) : null;
   try {
@@ -324,11 +333,22 @@ for (const tableName of TAG_TABLES) {
   });
 
   router.put(`/${route}/:id`, permissionMiddleware('products'), (req: Request, res: Response) => {
-    const { name, slug, sort_order = 0, is_active = 1, translations } = req.body;
+    const { name, slug, sort_order, is_active, translations } = req.body;
     try {
-      sqlite.prepare(
-        `UPDATE ${tableName} SET name=?, slug=?, sort_order=?, is_active=?, translations=? WHERE id=?`
-      ).run(name, slug, sort_order || 0, is_active ?? 1, translations ? JSON.stringify(translations) : null, req.params.id);
+      // 支持部分更新：如果只传了 is_active，直接切换状态
+      if (name === undefined && slug === undefined && sort_order === undefined && translations === undefined) {
+        sqlite.prepare(`UPDATE ${tableName} SET is_active=? WHERE id=?`).run(is_active ?? 1, req.params.id);
+      } else {
+        const existing = sqlite.prepare(`SELECT * FROM ${tableName} WHERE id=?`).get(req.params.id) as any;
+        const n = name ?? existing.name;
+        const s = slug ?? existing.slug;
+        const so = sort_order ?? existing.sort_order;
+        const ia = is_active ?? existing.is_active;
+        const tr = translations !== undefined ? (translations ? JSON.stringify(translations) : null) : existing.translations;
+        sqlite.prepare(
+          `UPDATE ${tableName} SET name=?, slug=?, sort_order=?, is_active=?, translations=? WHERE id=?`
+        ).run(n, s, so, ia, tr, req.params.id);
+      }
       res.json({ success: true });
     } catch (err: any) {
       if (err.message.includes('UNIQUE constraint failed')) {
@@ -570,9 +590,9 @@ router.put('/products/:id', permissionMiddleware('products'), (req: Request, res
   res.json({ success: true });
 });
 
-// 快捷编辑商品排序与推荐状态
+// 快捷编辑商品排序、推荐状态与上架状态
 router.patch('/products/:id/quick-edit', permissionMiddleware('products'), (req: Request, res: Response) => {
-  const { sortOrder, isFeatured } = req.body;
+  const { sortOrder, isFeatured, isActive } = req.body;
   const updates = [];
   const params = [];
   if (sortOrder !== undefined) {
@@ -583,6 +603,10 @@ router.patch('/products/:id/quick-edit', permissionMiddleware('products'), (req:
     updates.push('is_featured = ?');
     params.push(isFeatured ? 1 : 0);
   }
+  if (isActive !== undefined) {
+    updates.push('is_active = ?');
+    params.push(isActive ? 1 : 0);
+  }
   if (updates.length > 0) {
     params.push(Date.now(), req.params.id);
     sqlite.prepare(`UPDATE products SET ${updates.join(', ')}, updated_at = ? WHERE id = ?`).run(...params);
@@ -590,10 +614,30 @@ router.patch('/products/:id/quick-edit', permissionMiddleware('products'), (req:
   res.json({ success: true });
 });
 
-// 删除商品
+// 删除商品（硬删除，级联删除关联数据）
 router.delete('/products/:id', permissionMiddleware('products'), (req: Request, res: Response) => {
-  sqlite.prepare('UPDATE products SET is_active=0,updated_at=? WHERE id=?').run(Date.now(), req.params.id);
-  res.json({ success: true });
+  const productId = req.params.id;
+
+  const deleteTx = sqlite.transaction(() => {
+    sqlite.prepare('DELETE FROM product_prices WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM cart_items WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM order_items WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM favorites WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM reviews WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM user_behavior_logs WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM product_bundle_items WHERE bundle_id = ? OR product_id = ?').run(productId, productId);
+    sqlite.prepare('DELETE FROM product_ingredients WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM restock_requests WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM subscriptions WHERE product_id = ?').run(productId);
+    sqlite.prepare('DELETE FROM products WHERE id = ?').run(productId);
+  });
+
+  try {
+    deleteTx();
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: '删除失败: ' + e.message });
+  }
 });
 
 // ========== 订单管理（需 orders 权限） ==========
@@ -628,7 +672,49 @@ router.put('/orders/:id/status', permissionMiddleware('orders'), (req: Request, 
     res.status(400).json({ error: '无效状态' });
     return;
   }
-  sqlite.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=?').run(status, Date.now(), req.params.id);
+
+  const orderId = req.params.id;
+  const order = sqlite.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+  if (!order) {
+    res.status(404).json({ error: '订单不存在' });
+    return;
+  }
+
+  const now = Date.now();
+
+  if (status === 'refunded' && order.status !== 'refunded') {
+    // 线下标记退款，同步恢复库存、扣减消费总额并记录日志
+    const executeOfflineRefund = sqlite.transaction(() => {
+      sqlite.prepare('UPDATE orders SET status = ?, updated_at = ? WHERE id = ?').run('refunded', now, orderId);
+
+      // 恢复库存
+      const items = sqlite.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+      for (const item of items) {
+        sqlite.prepare('UPDATE products SET stock = stock + ? WHERE id = ?').run(item.quantity, item.product_id);
+      }
+
+      // 更新用户消费总额
+      sqlite.prepare('UPDATE users SET total_spend = total_spend - ?, updated_at = ? WHERE id = ?').run(order.pay_amount, now, order.user_id);
+
+      // 记录退款日志
+      const refundNo = `RF_OFFLINE_${order.order_no}`;
+      sqlite.prepare(`
+        INSERT INTO payment_logs (order_id, channel, trade_no, status, amount, created_at, updated_at)
+        VALUES (?, ?, ?, 'refunded', ?, ?, ?)
+      `).run(orderId, order.pay_method, refundNo, order.pay_amount, now, now);
+    });
+
+    try {
+      executeOfflineRefund();
+      res.json({ success: true, message: '已手动标记为线下退款完成' });
+      return;
+    } catch (e: any) {
+      res.status(500).json({ error: `退款操作失败: ${e.message}` });
+      return;
+    }
+  }
+
+  sqlite.prepare('UPDATE orders SET status=?,updated_at=? WHERE id=?').run(status, now, orderId);
   res.json({ success: true });
 });
 
@@ -810,4 +896,165 @@ router.post('/abandoned-cart/recover', permissionMiddleware('orders'), (req: Req
   res.json({ success: true, message: `成功向 ${recoveredCount} 位用户发送了弃单挽回邮件与积分奖励`, recoveredCount });
 });
 
+// ============================================================
+// 代金券管理接口
+// ============================================================
+
+// 获取代金券配置（问卷奖励等）
+router.get('/coupon-settings', staffMiddleware, (req: Request, res: Response) => {
+  const configs = sqlite.prepare('SELECT * FROM coupon_configs').all() as any[];
+  res.json({ configs });
+});
+
+// 更新代金券配置
+router.put('/coupon-settings/:source', adminMiddleware, (req: Request, res: Response) => {
+  const { source } = req.params;
+  const { type, value, min_amount, valid_days, is_active, description } = req.body;
+
+  const existing = sqlite.prepare('SELECT id FROM coupon_configs WHERE source = ?').get(source) as any;
+  if (!existing) {
+    res.status(404).json({ error: '配置不存在' });
+    return;
+  }
+
+  sqlite.prepare(`
+    UPDATE coupon_configs
+    SET type = ?, value = ?, min_amount = ?, valid_days = ?, is_active = ?, description = ?, updated_at = ?
+    WHERE source = ?
+  `).run(
+    type || 'fixed',
+    parseFloat(value) || 30,
+    parseFloat(min_amount) || 0,
+    parseInt(valid_days) || 30,
+    is_active ? 1 : 0,
+    description || '',
+    Date.now(),
+    source
+  );
+
+  res.json({ success: true });
+});
+
+// 获取所有用户代金券发放记录（分页）
+router.get('/coupons', staffMiddleware, (req: Request, res: Response) => {
+  const { page = '1', limit = '20', status, source } = req.query;
+  const pageNum = parseInt(page as string);
+  const limitNum = parseInt(limit as string);
+  const offset = (pageNum - 1) * limitNum;
+
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (status && status !== 'all') {
+    conditions.push('uc.status = ?');
+    params.push(status);
+  }
+  if (source && source !== 'all') {
+    conditions.push('uc.source = ?');
+    params.push(source);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const coupons = sqlite.prepare(`
+    SELECT uc.*, u.name as user_name, u.email as user_email
+    FROM user_coupons uc
+    JOIN users u ON uc.user_id = u.id
+    ${where}
+    ORDER BY uc.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limitNum, offset) as any[];
+
+  const total = (sqlite.prepare(`
+    SELECT COUNT(*) as c FROM user_coupons uc ${where}
+  `).get(...params) as any).c;
+
+  res.json({ coupons, total, page: pageNum });
+});
+
+// ============================================================
+// 问卷题目管理
+// GET  /admin/quiz-questions?lang=zh|en|de  — 读取题目配置
+// PUT  /admin/quiz-questions/:lang          — 保存题目配置
+// ============================================================
+
+const QUIZ_QUESTIONS_SETTING_PREFIX = 'quiz_questions_';
+
+router.get('/quiz-questions', adminMiddleware, (req: Request, res: Response) => {
+  const lang = (req.query.lang as string) || 'zh';
+  const key = QUIZ_QUESTIONS_SETTING_PREFIX + lang;
+  const row = sqlite.prepare('SELECT value FROM site_settings WHERE key = ?').get(key) as any;
+  if (!row) {
+    res.json({ questions: null }); // null = use built-in defaults
+    return;
+  }
+  try {
+    res.json({ questions: JSON.parse(row.value) });
+  } catch {
+    res.json({ questions: null });
+  }
+});
+
+router.put('/quiz-questions/:lang', adminMiddleware, (req: Request, res: Response) => {
+  const lang = req.params.lang as string;
+  if (!['zh', 'en', 'de'].includes(lang)) {
+    res.status(400).json({ error: '语言参数非法，仅支持 zh / en / de' });
+    return;
+  }
+  const { questions } = req.body;
+  if (!Array.isArray(questions)) {
+    res.status(400).json({ error: 'questions 必须是数组' });
+    return;
+  }
+  const key = QUIZ_QUESTIONS_SETTING_PREFIX + lang;
+  const value = JSON.stringify(questions);
+  const now = Date.now();
+  const exists = sqlite.prepare('SELECT key FROM site_settings WHERE key = ?').get(key);
+  if (exists) {
+    sqlite.prepare('UPDATE site_settings SET value = ?, updated_at = ? WHERE key = ?').run(value, now, key);
+  } else {
+    sqlite.prepare('INSERT INTO site_settings (key, value, description, updated_at) VALUES (?, ?, ?, ?)').run(
+      key, value, `问卷题目配置（${lang}）`, now
+    );
+  }
+  res.json({ success: true });
+});
+
+// ============================================================
+// 问卷流程设置
+// GET /admin/quiz-flow   — 读取流程参数
+// PUT /admin/quiz-flow   — 保存流程参数
+// ============================================================
+const QUIZ_FLOW_KEYS = ['quiz_max_dynamic_questions', 'quiz_require_login_for_result'] as const;
+
+router.get('/quiz-flow', adminMiddleware, (req: Request, res: Response) => {
+  const rows = sqlite.prepare(
+    `SELECT key, value FROM site_settings WHERE key IN (${QUIZ_FLOW_KEYS.map(() => '?').join(',')})`
+  ).all(...QUIZ_FLOW_KEYS) as any[];
+  const result: Record<string, string> = { quiz_max_dynamic_questions: '7', quiz_require_login_for_result: '0' };
+  rows.forEach(r => { result[r.key] = r.value; });
+  res.json(result);
+});
+
+router.put('/quiz-flow', adminMiddleware, (req: Request, res: Response) => {
+  const { quiz_max_dynamic_questions, quiz_require_login_for_result } = req.body;
+  const now = Date.now();
+  const upsert = (key: string, value: string, desc: string) => {
+    const exists = sqlite.prepare('SELECT key FROM site_settings WHERE key = ?').get(key);
+    if (exists) {
+      sqlite.prepare('UPDATE site_settings SET value = ?, updated_at = ? WHERE key = ?').run(value, now, key);
+    } else {
+      sqlite.prepare('INSERT INTO site_settings (key, value, description, updated_at) VALUES (?, ?, ?, ?)').run(key, value, desc, now);
+    }
+  };
+  if (quiz_max_dynamic_questions !== undefined) {
+    upsert('quiz_max_dynamic_questions', String(Number(quiz_max_dynamic_questions)), 'AI问卷最大动态追问数量');
+  }
+  if (quiz_require_login_for_result !== undefined) {
+    upsert('quiz_require_login_for_result', quiz_require_login_for_result ? '1' : '0', '问卷结果是否强制登录后查看');
+  }
+  res.json({ success: true });
+});
+
 export default router;
+

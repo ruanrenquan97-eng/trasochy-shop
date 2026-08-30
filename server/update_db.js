@@ -1,5 +1,5 @@
-const fs = require('fs');
-const db = require('better-sqlite3')('e:/私有云/我的AI管理系统/TRASOCHY-shop/data/skincare.db');
+const path = require('path');
+const db = require('better-sqlite3')(path.resolve(__dirname, '../data/skincare.db'));
 
 try {
   const row = db.prepare(`SELECT value FROM site_settings WHERE key='brand_team_members'`).get();

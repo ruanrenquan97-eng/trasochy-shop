@@ -1,13 +1,50 @@
+import { useState } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, ShoppingBag, Settings, LogOut, ChevronRight, ShieldCheck, BookOpen, Megaphone, Bot, FolderTree, FileText, FlaskConical } from 'lucide-react';
+import { 
+  LayoutDashboard, Users, Package, ShoppingBag, Settings, LogOut, 
+  ChevronRight, ChevronDown, ShieldCheck, BookOpen, Megaphone, Bot, 
+  FolderTree, FileText, FlaskConical, Gift, Sparkles, Tag, Award, ToggleRight, ClipboardList 
+} from 'lucide-react';
 import { useAuthStore } from '../contexts/authStore';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
-const allNavItems = [
+import BackToTop from './BackToTop';
+
+interface NavSubItem {
+  to: string;
+  label: string;
+  icon?: any;
+}
+
+interface NavItem {
+  to?: string;
+  label: string;
+  icon: any;
+  exact?: boolean;
+  permission: string | null;
+  children?: NavSubItem[];
+}
+
+const allNavItems: NavItem[] = [
   { to: '/admin', label: '仪表盘', icon: LayoutDashboard, exact: true, permission: null },
   { to: '/admin/categories', label: '分类管理', icon: FolderTree, permission: 'products' },
   { to: '/admin/products', label: '商品管理', icon: Package, permission: 'products' },
-  { to: '/admin/marketing', label: '营销管理', icon: Megaphone, permission: 'marketing' },
+  {
+    to: '/admin/marketing',
+    label: '营销管理',
+    icon: Megaphone,
+    permission: 'marketing',
+    children: [
+      { to: '/admin/marketing?tab=promo', label: '促销活动', icon: Sparkles },
+      { to: '/admin/marketing?tab=coupons', label: '代金券管理', icon: Gift },
+      { to: '/admin/marketing?tab=surveys', label: '调研问卷库', icon: ClipboardList },
+      { to: '/admin/marketing?tab=points', label: '积分与推荐', icon: Award },
+      { to: '/admin/marketing?tab=pages', label: '页面内容管理', icon: FileText },
+      { to: '/admin/marketing?tab=features', label: '功能开关', icon: ToggleRight },
+      { to: '/admin/marketing?tab=ingredients', label: '成分百科', icon: BookOpen },
+      { to: '/admin/marketing?tab=brand_story', label: '品牌技术配置', icon: Sparkles },
+    ],
+  },
   { to: '/admin/ai', label: 'AI管理', icon: Bot, permission: 'ai' },
   { to: '/admin/orders', label: '订单管理', icon: ShoppingBag, permission: 'orders' },
   { to: '/admin/research-institute', label: '研究院管理', icon: FlaskConical, permission: 'articles' },
@@ -20,11 +57,25 @@ export default function AdminLayout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ '营销管理': true });
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.get('/settings'),
   }) as any;
+
+  // 判断子菜单是否处于活跃状态
+  const isChildActive = (childTo: string) => {
+    const [childPath, childQuery] = childTo.split('?');
+    if (location.pathname !== childPath) return false;
+    if (childQuery) {
+      const params = new URLSearchParams(childQuery);
+      const targetTab = params.get('tab');
+      const currentTab = new URLSearchParams(location.search).get('tab') || 'pages';
+      return targetTab === currentTab;
+    }
+    return true;
+  };
 
   // 根据 role 和 permissions 和 settings 过滤导航
   const visibleNavItems = allNavItems.filter(item => {
@@ -33,13 +84,16 @@ export default function AdminLayout() {
     if (!item.permission) return true; // 仪表盘始终显示
     if (user?.level === 'admin') return true; // admin 全部可见
     if (user?.level === 'staff') {
-      // staff：员工管理永远不显示，其他看 permissions
       if (item.permission === 'staff') return false;
       const perms = user.permissions || [];
       return perms.includes(item.permission);
     }
     return false;
   });
+
+  const toggleGroup = (groupLabel: string) => {
+    setOpenGroups(prev => ({ ...prev, [groupLabel]: !prev[groupLabel] }));
+  };
 
   return (
     <div className="flex h-screen bg-stone-50">
@@ -49,18 +103,76 @@ export default function AdminLayout() {
           <a href="/" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-white tracking-widest">TRASOCHY</a>
           <span className="ml-2 text-xs text-stone-500 tracking-wider">管理后台</span>
         </div>
-        <nav className="flex-1 py-6 px-3">
+        <nav className="flex-1 py-6 px-3 overflow-y-auto">
           {visibleNavItems.map(item => {
             const Icon = item.icon;
-            const active = item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to);
+
+            // 具有子菜单的分组（如营销管理）
+            if (item.children && item.children.length > 0) {
+              const isGroupActive = location.pathname.startsWith('/admin/marketing');
+              const isOpen = openGroups[item.label] ?? true;
+
+              return (
+                <div key={item.label} className="mb-1">
+                  <div className="flex items-center">
+                    <Link
+                      to={item.to || '#'}
+                      className={`flex-1 flex items-center gap-3 px-3 py-2.5 text-xs tracking-wider transition-colors rounded-l-lg ${
+                        isGroupActive ? 'text-white font-medium bg-stone-900/80' : 'text-stone-400 hover:text-white hover:bg-stone-900/40'
+                      }`}
+                    >
+                      <Icon size={16} className={isGroupActive ? 'text-rose-400' : ''} />
+                      <span>{item.label}</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(item.label)}
+                      title={isOpen ? '收起子菜单' : '展开子菜单'}
+                      className={`px-2 py-2.5 text-stone-500 hover:text-white transition-colors rounded-r-lg ${
+                        isGroupActive ? 'bg-stone-900/80' : 'hover:bg-stone-900/40'
+                      }`}
+                    >
+                      {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                  </div>
+
+                  {isOpen && (
+                    <div className="mt-1 ml-3 pl-3 border-l border-stone-800 space-y-1">
+                      {item.children.map(sub => {
+                        const SubIcon = sub.icon || ChevronRight;
+                        const active = isChildActive(sub.to);
+                        return (
+                          <Link
+                            key={sub.to}
+                            to={sub.to}
+                            className={`flex items-center gap-2.5 px-2.5 py-2 text-xs tracking-wider transition-colors rounded-lg ${
+                              active
+                                ? 'bg-stone-800 text-white font-medium shadow-sm'
+                                : 'text-stone-400 hover:text-white hover:bg-stone-900/40'
+                            }`}
+                          >
+                            <SubIcon size={13} className={active ? 'text-rose-400' : 'text-stone-500'} />
+                            <span>{sub.label}</span>
+                            {active && <ChevronRight size={11} className="ml-auto text-stone-400" />}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // 单个导航项
+            const active = item.exact ? location.pathname === item.to : (item.to ? location.pathname.startsWith(item.to) : false);
             return (
               <Link
-                key={item.to}
-                to={item.to}
-                className={`flex items-center gap-3 px-3 py-2.5 mb-1 text-xs tracking-wider transition-colors ${active ? 'bg-stone-800 text-white' : 'text-stone-400 hover:text-white'}`}
+                key={item.to || item.label}
+                to={item.to || '#'}
+                className={`flex items-center gap-3 px-3 py-2.5 mb-1 text-xs tracking-wider transition-colors rounded-lg ${active ? 'bg-stone-800 text-white font-medium' : 'text-stone-400 hover:text-white'}`}
               >
                 <Icon size={16} />
-                {item.label}
+                <span>{item.label}</span>
                 {active && <ChevronRight size={12} className="ml-auto" />}
               </Link>
             );
@@ -85,6 +197,7 @@ export default function AdminLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+      <BackToTop />
     </div>
   );
 }

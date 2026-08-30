@@ -170,11 +170,21 @@
             if (actionPending) return;
             var isRunning = false;
             try {
+                var projectDir = getProjectPath().toLowerCase();
                 var wmiService = GetObject("winmgmts:\\\\.\\root\\cimv2");
                 var processes = wmiService.ExecQuery("Select * from Win32_Process Where Name = 'node.exe'");
                 var e = new Enumerator(processes);
-                if (!e.atEnd()) {
-                    isRunning = true;
+                while (!e.atEnd()) {
+                    var item = e.item();
+                    var cmdLine = item.CommandLine;
+                    if (cmdLine) {
+                        cmdLine = cmdLine.toLowerCase();
+                        if (cmdLine.indexOf(projectDir) !== -1) {
+                            isRunning = true;
+                            break;
+                        }
+                    }
+                    e.moveNext();
                 }
             } catch (e) {}
             
@@ -201,19 +211,55 @@
 
         function stopApp() {
             setActionStatus("正在停止服务...", "pending");
-            // 先关闭自动重启的守护窗口
+            try {
+                var projectDir = getProjectPath().toLowerCase();
+                var wmiService = GetObject("winmgmts:\\\\.\\root\\cimv2");
+                
+                // 1. 杀死与该项目相关的 node.exe 进程
+                var nodeProcesses = wmiService.ExecQuery("Select * from Win32_Process Where Name = 'node.exe'");
+                var eNode = new Enumerator(nodeProcesses);
+                while (!eNode.atEnd()) {
+                    var item = eNode.item();
+                    var cmdLine = item.CommandLine;
+                    if (cmdLine) {
+                        cmdLine = cmdLine.toLowerCase();
+                        if (cmdLine.indexOf(projectDir) !== -1) {
+                            try {
+                                item.Terminate(0);
+                            } catch(ex) {}
+                        }
+                    }
+                    eNode.moveNext();
+                }
+
+                // 2. 杀死与该项目相关的 cmd.exe 守护进程
+                var cmdProcesses = wmiService.ExecQuery("Select * from Win32_Process Where Name = 'cmd.exe'");
+                var eCmd = new Enumerator(cmdProcesses);
+                while (!eCmd.atEnd()) {
+                    var item = eCmd.item();
+                    var cmdLine = item.CommandLine;
+                    if (cmdLine) {
+                        cmdLine = cmdLine.toLowerCase();
+                        if (cmdLine.indexOf(projectDir) !== -1 && cmdLine.indexOf("start.bat") !== -1) {
+                            try {
+                                item.Terminate(0);
+                            } catch(ex) {}
+                        }
+                    }
+                    eCmd.moveNext();
+                }
+            } catch(e) {}
+
+            // 3. 作为备份手段，关闭具有指定窗口标题的守护窗口
             runCommand('taskkill /F /FI "WINDOWTITLE eq TRASOCHY Server Auto-Restart*" /T', 0);
-            // 杀死 node.exe 进程
-            runCommand('taskkill /F /IM node.exe /T', 0);
         }
 
         function restartApp() {
             setActionStatus("正在重启服务...", "pending");
-            runCommand('taskkill /F /FI "WINDOWTITLE eq TRASOCHY Server Auto-Restart*" /T', 0);
-            runCommand('taskkill /F /IM node.exe /T', 0);
+            stopApp();
             setTimeout(function() {
                 startApp();
-            }, 1500);
+            }, 2000);
         }
     </script>
 </head>

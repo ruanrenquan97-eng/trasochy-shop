@@ -13,7 +13,7 @@ function generateOrderNo(): string {
 
 // 创建订单
 router.post('/', authMiddleware, (req: Request, res: Response) => {
-  const { items, recipientName, recipientPhone, address, remark, payMethod, usePoints, isPointsRedemption, isGift, giftMessage, giftWrapFee } = req.body;
+  const { items, recipientName, recipientPhone, address, remark, payMethod, usePoints, isPointsRedemption, isGift, giftMessage, giftWrapFee, couponCode } = req.body;
   if (!items?.length) {
     res.status(400).json({ error: '订单项目不能为空' });
     return;
@@ -91,7 +91,38 @@ router.post('/', authMiddleware, (req: Request, res: Response) => {
     }
   }
 
-  let discountAmount = promoDiscount;
+  // 代金券验证与抵扣计算
+  let couponDiscount = 0;
+  let validatedCoupon: any = null;
+  if (couponCode && !isPointsRedemption) {
+    const normalizedCouponCode = String(couponCode).replace(/[\s\u00A0\u200B\u200C\u200D\u2060\uFEFF]/g, '').toUpperCase();
+    const coupon = sqlite.prepare(
+      "SELECT * FROM user_coupons WHERE code = ? AND user_id = ? AND status = 'unused'"
+    ).get(normalizedCouponCode, req.user!.id) as any;
+
+    if (!coupon) {
+      res.status(400).json({ error: '代金券无效或已使用' });
+      return;
+    }
+    if (Date.now() > coupon.expires_at) {
+      sqlite.prepare("UPDATE user_coupons SET status = 'expired' WHERE id = ?").run(coupon.id);
+      res.status(400).json({ error: '代金券已过期' });
+      return;
+    }
+    const orderBase = totalAmount - giftFee;
+    if (coupon.min_amount > 0 && orderBase < coupon.min_amount) {
+      res.status(400).json({ error: `该代金券需满 ¥${coupon.min_amount.toFixed(2)} 方可使用` });
+      return;
+    }
+    if (coupon.type === 'fixed') {
+      couponDiscount = Math.min(coupon.value, orderBase);
+    } else if (coupon.type === 'percent') {
+      couponDiscount = parseFloat((orderBase * coupon.value).toFixed(2));
+    }
+    validatedCoupon = coupon;
+  }
+
+  let discountAmount = promoDiscount + couponDiscount;
   let payAmount = 0;
   let status = 'pending';
   let payTime = null;
@@ -117,9 +148,9 @@ router.post('/', authMiddleware, (req: Request, res: Response) => {
 
   const createOrder = sqlite.transaction(() => {
     const result = sqlite.prepare(`
-      INSERT INTO orders (order_no,user_id,user_level,status,total_amount,discount_amount,pay_amount,pay_method,pay_time,recipient_name,recipient_phone,address,remark,is_gift,gift_message,gift_wrap_fee,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).run(orderNo, req.user!.id, userLevel, status, totalAmount, discountAmount, payAmount, payMethod || null, payTime, recipientName, recipientPhone, address, remark || null, isGift ? 1 : 0, giftMessage || null, giftFee, now, now);
+      INSERT INTO orders (order_no,user_id,user_level,status,total_amount,discount_amount,pay_amount,pay_method,pay_time,recipient_name,recipient_phone,address,remark,is_gift,gift_message,gift_wrap_fee,coupon_code,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(orderNo, req.user!.id, userLevel, status, totalAmount, discountAmount, payAmount, payMethod || null, payTime, recipientName, recipientPhone, address, remark || null, isGift ? 1 : 0, giftMessage || null, giftFee, validatedCoupon ? validatedCoupon.code : null, now, now);
 
     const orderId = result.lastInsertRowid;
 
@@ -164,6 +195,13 @@ router.post('/', authMiddleware, (req: Request, res: Response) => {
       if (!item.isSubscription && !item.isSample) {
         sqlite.prepare('DELETE FROM cart_items WHERE user_id=? AND product_id=?').run(req.user!.id, item.productId);
       }
+    }
+
+    // 核销代金券
+    if (validatedCoupon) {
+      sqlite.prepare(`
+        UPDATE user_coupons SET status = 'used', used_order_no = ?, used_at = ? WHERE id = ?
+      `).run(orderNo, now, validatedCoupon.id);
     }
 
     return orderId;
@@ -219,8 +257,8 @@ router.post('/:orderNo/cancel', authMiddleware, (req: Request, res: Response) =>
     res.status(404).json({ error: '订单不存在' });
     return;
   }
-  if (!['pending', 'paid'].includes(order.status)) {
-    res.status(400).json({ error: '该状态不可取消' });
+  if (order.status !== 'pending') {
+    res.status(400).json({ error: '已付款订单不能取消，请申请退款' });
     return;
   }
   const cancel = sqlite.transaction(() => {
@@ -241,6 +279,32 @@ router.post('/:orderNo/cancel', authMiddleware, (req: Request, res: Response) =>
     }
   });
   cancel();
+  res.json({ success: true });
+});
+
+// 用户申请退款
+router.post('/:orderNo/refund-request', authMiddleware, (req: Request, res: Response) => {
+  const order = sqlite.prepare('SELECT * FROM orders WHERE order_no=? AND user_id=?').get(req.params.orderNo, req.user!.id) as any;
+  if (!order) {
+    res.status(404).json({ error: '订单不存在' });
+    return;
+  }
+
+  if (order.status === 'refund_requested') {
+    res.json({ success: true });
+    return;
+  }
+
+  if (!['paid', 'processing', 'shipped', 'delivered'].includes(order.status)) {
+    res.status(400).json({ error: '该状态不可申请退款' });
+    return;
+  }
+
+  const reason = String(req.body?.reason || '').trim();
+  const note = reason ? `退款申请：${reason}` : '退款申请';
+  const remark = order.remark ? `${order.remark}\n${note}` : note;
+
+  sqlite.prepare("UPDATE orders SET status='refund_requested',remark=?,updated_at=? WHERE id=?").run(remark, Date.now(), order.id);
   res.json({ success: true });
 });
 

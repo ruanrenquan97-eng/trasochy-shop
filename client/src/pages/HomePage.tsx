@@ -230,7 +230,7 @@ export default function HomePage() {
                   dangerouslySetInnerHTML={{ __html: settings.hero_title ? settings.hero_title.replace(/<br\s*\/?>/gi, '<br/>').replace(/\n/g, '<br/>') : '发现<br/><span class="text-gradient-gold font-light">臻致美肌</span><br/>之力' }}
                 />
               <p className="animate-fade-up-delay-2 text-stone-400 text-sm md:text-base leading-relaxed max-w-md mb-10 tracking-wide">
-                {settings.hero_subtitle || t('auto_homepage_149', '传诗奇——中国院线护肤专家，科学配方与天然成分的完美融合。从深层修护到焕颜抗衰，为每一寸肌肤带来高端定制护理体验。')}
+                {settings.hero_subtitle || t('auto_homepage_149', '传诗奇——科学护肤探索者，科学配方与精选成分的巧妙融合。从屏障修护到多维焕采，为每一寸肌肤带来专属定制护理体验。')}
               </p>
 
               <div className="animate-fade-up-delay-3 flex flex-wrap gap-4">
@@ -271,7 +271,7 @@ export default function HomePage() {
                 />
                 {/* 底部玻璃卡片 */}
                 <div className="absolute -bottom-4 -left-8 w-52 glass rounded-lg p-4">
-                  <p className="text-[10px] text-stone-400 tracking-wider uppercase mb-1">{t('auto_homepage_127', t('auto_homepage_127', '院线专供'))}</p>
+                  <p className="text-[10px] text-stone-400 tracking-wider uppercase mb-1">{t('auto_homepage_127', t('auto_homepage_127', '沙龙专研'))}</p>
                   <p className="text-white text-sm font-light">{t('auto_homepage_128', t('auto_homepage_128', '传诗奇护肤系列'))}</p>
                   <div className="flex gap-1 mt-2">
                     {[1,2,3,4,5].map(i => <Star key={i} size={10} className="text-amber-400" fill="currentColor" />)}
@@ -311,10 +311,10 @@ export default function HomePage() {
         <section className="max-w-7xl mx-auto px-6 py-10 md:py-12">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
-              { icon: ShieldCheck, title: t('auto_homepage_157', '全球独创透皮科技'), desc: t('auto_homepage_158', '第三代生物透皮技术，突破大分子吸收壁垒') },
-              { icon: Award, title: t('auto_homepage_159', '多项国际专利'), desc: t('auto_homepage_160', '中国及美国发明专利加持，FDA cGMP认证') },
-              { icon: Droplets, title: t('auto_homepage_161', '百万案例验证'), desc: t('auto_homepage_162', '1,000,000+ 肌肤管理案例，真实有效') },
-              { icon: Sparkles, title: t('auto_homepage_163', '真科研 真有效'), desc: t('auto_homepage_164', '中科大教授团队11年深耕，科学护肤方案') },
+              { icon: ShieldCheck, title: t('auto_homepage_157', '生物透皮递送技术'), desc: t('auto_homepage_158', '专注生物透皮科技创新，助力护肤成分高效吸收') },
+              { icon: Award, title: t('auto_homepage_159', '专研专利技术'), desc: t('auto_homepage_160', '发明专利技术加持，高标准质控规范') },
+              { icon: Droplets, title: t('auto_homepage_161', '万千口碑见证'), desc: t('auto_homepage_162', '积累丰富肌肤管理案例，深受用户好评') },
+              { icon: Sparkles, title: t('auto_homepage_163', '科学研创 专属呵护'), desc: t('auto_homepage_164', '科研团队深耕探索，提供科学定制方案') },
             ].map((f, i) => (
               <div
                 key={f.title}
@@ -423,7 +423,7 @@ export default function HomePage() {
                 <StatItem value="50+" label={t('auto_homepage_141', '优质产品')} />
                 <StatItem value={t('auto_homepage_142', '10万+')} label={t('auto_homepage_143', '满意客户')} />
                 <StatItem value="98.6%" label={t('auto_homepage_144', '好评率')} />
-                <StatItem value="15+" label={t('auto_homepage_145', '独家专利')} />
+                <StatItem value="15+" label={t('auto_homepage_145', '发明专利')} />
               </div>
             </div>
           </div>

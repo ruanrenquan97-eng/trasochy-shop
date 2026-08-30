@@ -86,7 +86,7 @@ export default function StoryProductLayout({ product, settings, onAddToCart, add
         {/* 产品介绍 */}
         <div className="grid md:grid-cols-2 gap-16 items-center">
           <div className="order-2 md:order-1 space-y-8">
-            <h2 className="text-3xl md:text-4xl font-light leading-tight">{t('auto_storyproductlayout_361', t('auto_storyproductlayout_361', '科学与艺术的完美融合'))}</h2>
+            <h2 className="text-3xl md:text-4xl font-light leading-tight">{t('auto_storyproductlayout_361', t('auto_storyproductlayout_361', '科学与艺术的巧妙融合'))}</h2>
             <div className="w-12 h-[1px] bg-rose-500"></div>
             <div 
               className="text-white/60 font-sans leading-relaxed space-y-4 text-sm md:text-base prose prose-invert max-w-none"

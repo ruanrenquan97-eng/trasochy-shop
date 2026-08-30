@@ -4,12 +4,28 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { generateAndSaveReport } from '../utils/cron';
 import { authMiddleware, permissionMiddleware } from '../middleware/auth';
+import { createArticleCoverImage } from '../utils/imageGenerator';
+import { DreaminaService } from '../services/dreaminaService';
 
 const router = Router();
+
+function getAiLanguage(language?: string) {
+  const base = (language || 'zh').split('-')[0].toLowerCase();
+  if (base === 'en') return { code: 'en', name: 'English' };
+  if (base === 'de') return { code: 'de', name: 'German' };
+  return { code: 'zh', name: 'Chinese' };
+}
+
+const FALLBACK_GUARDIAN_LETTER: Record<string, string> = {
+  zh: '亲爱的用户，\n\n基于您的肌肤诉求，我们为您精心甄选了这套护肤方案。请坚持使用，静待时光赋予的美丽蜕变。',
+  en: 'Dear friend,\n\nBased on your skin concerns, we have selected this skincare plan for you with care. Use it consistently and let your skin gradually reveal a calmer, healthier glow.',
+  de: 'Liebe Kundin, lieber Kunde,\n\nBasierend auf Ihren Hautbedurfnissen haben wir diesen Pflegeplan sorgfaltig fur Sie ausgewahlt. Nutzen Sie ihn konsequent und geben Sie Ihrer Haut Zeit, sich sichtbar zu erholen.',
+};
 
 router.post('/analyze', async (req: Request, res: Response) => {
   try {
     const { answers } = req.body;
+    const aiLanguage = getAiLanguage(req.body?.language);
     if (!answers || !answers.skin_type || !answers.primary_concern) {
       res.status(400).json({ error: 'Missing required quiz answers' });
       return;
@@ -18,6 +34,12 @@ router.post('/analyze', async (req: Request, res: Response) => {
     const skinType = answers.skin_type;
     const concern = answers.primary_concern;
     const ageGroup = answers.age_group || 'unknown';
+
+    // 融合 DermiVue 图像测肤检测出的客观肌肤问题
+    const skinAnalysis: any = req.body.skinAnalysis || {};
+    const detectedConcerns: string[] = Array.isArray(skinAnalysis.concerns)
+      ? skinAnalysis.concerns.map((c: any) => String(c)).filter((x: any) => x)
+      : [];
 
     // 1. 获取所有商品并计算匹配得分
     const allProducts = sqlite.prepare(`
@@ -36,6 +58,10 @@ router.post('/analyze', async (req: Request, res: Response) => {
       
       if (pSkinTypes.includes(skinType)) score += 5;
       if (pConcerns.includes(concern)) score += 5;
+      // 图像检测出的客观肌肤问题也参与匹配
+      detectedConcerns.forEach((dc: string) => {
+        if (pConcerns.includes(dc)) score += 3;
+      });
       
       score += Math.random() * 2; // 随机扰动
       return { ...p, score };
@@ -60,7 +86,7 @@ router.post('/analyze', async (req: Request, res: Response) => {
     if (!apiKey) {
       console.warn('API_KEY is not set, falling back to static text.');
       res.json({
-        guardian_letter: `亲爱的用户，\n\n基于您的肌肤诉求，我们为您精心甄选了这套护肤方案。请坚持使用，静待时光赋予的美丽蜕变。`,
+        guardian_letter: FALLBACK_GUARDIAN_LETTER[aiLanguage.code],
         products: recommended
       });
       return;
@@ -114,11 +140,17 @@ router.post('/analyze', async (req: Request, res: Response) => {
       .replace('{userConcern}', userConcern)
       .replace('{productNames}', productNames);
 
+    // 融合 DermiVue 图像检测结果（客观肌肤问题）
+    if (detectedConcerns.length > 0) {
+      customPrompt += `【DermiVue 图像检测】系统通过计算机视觉客观检测到用户存在以下肌肤问题：${detectedConcerns.join('、')}。请在信中自然结合这些客观检测结果，给出更具针对性、更可信的护肤建议。`;
+    }
+
     const customDetails = req.body.answers?.customDetails || [];
     if (customDetails.length > 0) {
       const detailsList = customDetails.map((c: string, i: number) => `${i + 1}. ${c}`).join('\\n');
       customPrompt += `\\n\\n【特别提醒：请在写信时，一定要关照并回应用户自行补充的以下护肤细节】\\n${detailsList}`;
     }
+    customPrompt += `\n\nIMPORTANT: Output the final Guardian Letter in ${aiLanguage.name}. Do not mix languages unless a brand or product name requires it.`;
 
     const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
       method: 'POST',
@@ -142,7 +174,7 @@ router.post('/analyze', async (req: Request, res: Response) => {
     }
 
     const data: any = await response.json();
-    const letter = data.choices?.[0]?.message?.content || '亲爱的用户，为您定制的护肤方案已生成。';
+    const letter = data.choices?.[0]?.message?.content || FALLBACK_GUARDIAN_LETTER[aiLanguage.code];
 
     res.json({
       guardian_letter: letter,
@@ -158,6 +190,7 @@ router.post('/analyze', async (req: Request, res: Response) => {
 router.post('/generate-question', async (req: Request, res: Response) => {
   try {
     const { history } = req.body;
+    const aiLanguage = getAiLanguage(req.body?.language);
     
     const getSetting = (key: string) => {
       const row = sqlite.prepare(`SELECT value FROM site_settings WHERE key = ?`).get(key) as { value: string } | undefined;
@@ -175,6 +208,8 @@ router.post('/generate-question', async (req: Request, res: Response) => {
     const prompt = `你是一个专业的皮肤科医生和高端护肤品牌顾问。用户正在进行测肤问卷。
 这是用户已经回答的问题：
 ${historyText}
+
+IMPORTANT: The generated question, labels, and desc fields must be written in ${aiLanguage.name}. Do not mix languages unless a brand or product name requires it.
 
 请根据用户的上述情况，思考一个**下一个**最能帮助你精准评估用户肌肤状况或推荐护肤品的单项选择题（例如：具体的作息习惯、以往踩雷经历、某种特定症状的严重程度等）。
 要求：
@@ -250,7 +285,7 @@ router.post('/chat', async (req: Request, res: Response) => {
     }
 
     const allProducts = sqlite.prepare(`
-      SELECT p.name, p.base_price, p.description, p.skin_types, p.concerns
+      SELECT p.name, p.slug, p.base_price, p.description, p.skin_types, p.concerns
       FROM products p
       WHERE p.is_active = 1 AND p.is_bundle = 0
     `).all() as any[];
@@ -260,12 +295,13 @@ router.post('/chat', async (req: Request, res: Response) => {
       let concerns = [];
       try { skinTypes = p.skin_types ? JSON.parse(p.skin_types) : []; } catch(e){}
       try { concerns = p.concerns ? JSON.parse(p.concerns) : []; } catch(e){}
-      return `- ${p.name}: ￥${p.base_price}. 适合肤质: ${skinTypes.join(',')}. 功效: ${concerns.join(',')}. 简介: ${p.description}`;
+      return `- ${p.name}: ￥${p.base_price}. 适合肤质: ${skinTypes.join(',')}. 功效: ${concerns.join(',')}. 简介: ${p.description}. 购买链接: /products/${p.slug}`;
     }).join('\\n');
 
     const defaultChatPrompt = `你是 TRASOCHY 护肤商城的高级 AI 智能客服助手。
 你的任务是耐心、专业、温柔地解答客户的护肤疑问，并根据客户的需求推荐店内的合适产品。
-请尽量用简短、自然、像真人一样的口吻聊天，不要长篇大论。`;
+请尽量用简短、自然、像真人一样的口吻聊天，不要长篇大论。
+重要规范：当你给用户推荐商城的商品时，请务必直接使用提供的购买链接格式，如：推荐您搭配 [商品名称](/products/商品slug)，这能方便用户直接点击跳转购买，切勿遗漏或编造链接格式。`;
 
     const customChatPrompt = getSetting('ai_chat_prompt') || defaultChatPrompt;
     const knowledgeBase = getSetting('ai_knowledge_base') || '';
@@ -435,6 +471,8 @@ router.get('/reports', authMiddleware, permissionMiddleware('ai'), async (req: R
   }
 });
 
+// cover image generation functions are now imported from ../utils/imageGenerator
+
 router.post('/generate-article', authMiddleware, permissionMiddleware('articles'), async (req: Request, res: Response) => {
   try {
     const { topic } = req.body;
@@ -454,17 +492,31 @@ router.post('/generate-article', authMiddleware, permissionMiddleware('articles'
       return;
     }
 
-    const systemPrompt = `你是一位专业的院线护肤品牌 (TRASOCHY) 的内容编辑和护肤专家。
-你的任务是根据给定的主题或关键词，撰写一篇高质量的护肤科普文章或品牌动态。
-要求：
-1. 输出必须是标准的 Markdown 格式。
-2. 包含一个吸引人的主标题 (使用 # 标题)。
-3. 内容结构清晰，包含前言、核心知识点讲解、以及总结。使用适当的二级(##)和三级(###)标题。
-4. 语气专业、科学，同时易于普通消费者理解。
-5. 字数控制在 600-1000 字之间。
-6. 如果适用，可以在文章中自然地推荐相关的护肤理念或成分（如：烟酰胺、玻色因、氨基酸等）。`;
+    const systemPrompt = `你是 TRASOCHY 皮肤医学研究院的资深内容主编、皮肤科学顾问和国际化翻译编辑。
+你要根据给定主题，一次性产出可直接发布的护肤科普文章数据。
 
-    const userPrompt = `请以“${topic}”为主题写一篇文章。`;
+强制要求：
+1. 只输出合法 JSON，不要输出 markdown 代码块，不要输出解释文字。
+2. 中文正文 content 必须是排版良好的 Markdown，但不要在正文里再写 # 一级标题；标题放在 title 字段。
+3. 中文正文结构：开篇导语、3-5 个 ## 小节、必要的要点列表、一个温和专业的总结。段落要短，适合网页阅读。
+4. 同时生成英文和德文版本，放在 translations.en 和 translations.de 中，必须保留与中文相似的 Markdown 排版结构。
+5. 生成 5-8 个 SEO 关键词，中文 keywords 为字符串数组；英文/德文 keywords 也分别放在 translations 中。
+6. 生成 cover 字段，用于封面图文案：headline 不超过 38 个英文字符或 18 个中文字符，subtitle 不超过 80 个字符。
+7. 语气专业、可信、优雅，避免医疗诊断承诺，避免夸大功效。
+
+JSON 结构必须严格如下：
+{
+  "title": "中文标题",
+  "content": "中文 Markdown 正文",
+  "keywords": ["关键词1", "关键词2"],
+  "cover": { "headline": "封面主标题", "subtitle": "封面副标题" },
+  "translations": {
+    "en": { "title": "English title", "content": "English Markdown content", "keywords": ["keyword"] },
+    "de": { "title": "Deutscher Titel", "content": "Deutscher Markdown-Inhalt", "keywords": ["keyword"] }
+  }
+}`;
+
+    const userPrompt = `请以“${topic}”为主题生成文章。`;
 
     const response = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
       method: 'POST',
@@ -477,7 +529,8 @@ router.post('/generate-article', authMiddleware, permissionMiddleware('articles'
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
-        ]
+        ],
+        response_format: { type: 'json_object' }
       })
     });
 
@@ -488,9 +541,48 @@ router.post('/generate-article', authMiddleware, permissionMiddleware('articles'
     }
 
     const data: any = await response.json();
-    const articleMarkdown = data.choices?.[0]?.message?.content || '';
+    const rawContent = data.choices?.[0]?.message?.content || '{}';
+    let articleData: any;
+    try {
+      articleData = JSON.parse(rawContent);
+    } catch (e) {
+      const jsonStr = rawContent.match(/```json\n([\s\S]*?)\n```/)?.[1] || rawContent;
+      articleData = JSON.parse(jsonStr);
+    }
 
-    res.json({ content: articleMarkdown });
+    const title = String(articleData.title || topic).trim();
+    const content = String(articleData.content || '').trim();
+    const keywords = Array.isArray(articleData.keywords)
+      ? articleData.keywords.map((k: any) => String(k).trim()).filter(Boolean)
+      : String(articleData.keywords || '').split(',').map(k => k.trim()).filter(Boolean);
+    const coverStyle = getSetting('ai_article_cover_style') || 'svg';
+    const coverImage = await createArticleCoverImage({
+      title: articleData.cover?.headline || title,
+      subtitle: articleData.cover?.subtitle || keywords.slice(0, 3).join(' / '),
+      keywords,
+      content,
+      coverStyle,
+      apiKey,
+    });
+
+    res.json({
+      title,
+      content,
+      keywords,
+      coverImage,
+      translations: {
+        en: {
+          title: articleData.translations?.en?.title || '',
+          content: articleData.translations?.en?.content || '',
+          keywords: articleData.translations?.en?.keywords || [],
+        },
+        de: {
+          title: articleData.translations?.de?.title || '',
+          content: articleData.translations?.de?.content || '',
+          keywords: articleData.translations?.de?.keywords || [],
+        },
+      },
+    });
 
   } catch (err: any) {
     console.error('[AI Article Gen Error]', err);
@@ -744,15 +836,196 @@ router.get('/skin-records', authMiddleware, permissionMiddleware('ai'), (req: Re
   }
 });
 
-// 删除皮肤分析历史记录
-router.delete('/skin-records/:id', authMiddleware, permissionMiddleware('ai'), (req: Request, res: Response) => {
+// --- 即梦 AI 图像生成服务集成 ---
+
+let activeLoginProcess: any = null;
+
+// 1. 获取即梦登录状态与额度
+router.get('/dreamina/status', authMiddleware, permissionMiddleware('ai'), async (req: Request, res: Response) => {
   try {
-    const recordId = req.params.id;
-    sqlite.prepare('DELETE FROM skin_analysis_records WHERE id = ?').run(recordId);
-    res.json({ success: true });
+    const status = await DreaminaService.checkLoginStatus();
+    const hasCliPermission = await DreaminaService.getCliPermissionStatus();
+    res.json({ success: true, ...status, hasCliPermission });
   } catch (err: any) {
-    console.error('[Skin Record Delete Error]', err);
-    res.status(500).json({ error: '删除记录失败' });
+    console.error('[Dreamina Status Error]', err);
+    res.status(500).json({ error: '获取即梦状态失败: ' + err.message });
+  }
+});
+
+// 1.5 退出即梦登录状态
+router.post('/dreamina/logout', authMiddleware, permissionMiddleware('ai'), async (req: Request, res: Response) => {
+  try {
+    const success = await DreaminaService.logout();
+    if (success) {
+      res.json({ success: true, message: '即梦账号本地登录态已清除，您可以重新进行登录。' });
+    } else {
+      res.status(500).json({ error: '退出登录失败，清除本地会话异常' });
+    }
+  } catch (err: any) {
+    console.error('[Dreamina Logout Error]', err);
+    res.status(500).json({ error: '退出即梦登录流程异常: ' + err.message });
+  }
+});
+
+// 2. 发起扫码登录并获取二维码 URL
+router.post('/dreamina/login', authMiddleware, permissionMiddleware('ai'), async (req: Request, res: Response) => {
+  try {
+    // 杀死已有的登录流程
+    if (activeLoginProcess) {
+      try { activeLoginProcess.kill(); } catch (e) {}
+      activeLoginProcess = null;
+    }
+
+    const publicUploadDir = path.join(process.cwd(), 'uploads', 'dreamina');
+    await fs.mkdir(publicUploadDir, { recursive: true }).catch(() => {});
+    const publicQrPath = path.join(publicUploadDir, 'qr_login.png');
+
+    let responseSent = false;
+
+    activeLoginProcess = await DreaminaService.startHeadlessLogin(
+      (verificationUri, userCode, deviceCode) => {
+        if (!responseSent) {
+          responseSent = true;
+
+          // 提取内部的抖音授权直达链接，避免 Douyin App 扫码报“当前链接不合法”的错误
+          let scanUrl = verificationUri;
+          try {
+            const parsedUrl = new URL(verificationUri);
+            const nested = parsedUrl.searchParams.get('verification_uri');
+            if (nested) {
+              scanUrl = nested;
+            }
+          } catch (e) {
+            console.error('[Dreamina Login] Failed to parse nested verification_uri:', e);
+          }
+
+          res.json({
+            success: true,
+            verificationUri,
+            scanUrl,
+            userCode,
+            deviceCode,
+            message: '请使用浏览器打开授权页面并输入用户码，或者使用手机扫描生成的二维码授权'
+          });
+        }
+      },
+      () => {
+        console.log('[Dreamina Login] Authenticated successfully!');
+        activeLoginProcess = null;
+      },
+      (err) => {
+        console.error('[Dreamina Login ErrorCallback]', err);
+        activeLoginProcess = null;
+        if (!responseSent) {
+          responseSent = true;
+          res.status(500).json({ error: '即梦登录启动失败: ' + err });
+        }
+      }
+    );
+  } catch (err: any) {
+    console.error('[Dreamina Login Route Error]', err);
+    res.status(500).json({ error: '启动即梦登录流程异常: ' + err.message });
+  }
+});
+
+// 3. 提交文本生成图片任务
+router.post('/dreamina/generate', authMiddleware, permissionMiddleware('ai'), async (req: Request, res: Response) => {
+  try {
+    const { prompt, ratio, model, resolutionType } = req.body;
+    if (!prompt) {
+      res.status(400).json({ error: '提示词 prompt 不能为空' });
+      return;
+    }
+
+    const { loggedIn } = await DreaminaService.checkLoginStatus();
+    if (!loggedIn) {
+      res.status(401).json({ error: '即梦未登录，请先进行后台扫码登录' });
+      return;
+    }
+
+    const hasCliPermission = await DreaminaService.getCliPermissionStatus();
+    if (!hasCliPermission) {
+      res.status(403).json({ error: '您的账号尚未获得即梦官方 CLI/API 开发者白名单权限，请先登录官方控制台申请，或在状态管理中切换已开通权限的账号重新登录。' });
+      return;
+    }
+
+    const result = await DreaminaService.text2Image({ prompt, ratio, model, resolutionType });
+    
+    // 获取当前登录用户ID
+    let userId: number | null = null;
+    if (req.headers.authorization) {
+      try {
+        const token = req.headers.authorization.split(' ')[1];
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'trasochy_secret_2024');
+        userId = decoded.id;
+      } catch (e) {}
+    }
+
+    const now = Date.now();
+    sqlite.prepare(`
+      INSERT INTO dreamina_tasks (submit_id, user_id, prompt, task_type, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(result.submitId, userId, prompt, 'text2image', 'querying', now, now);
+
+    res.json({
+      success: true,
+      submitId: result.submitId,
+      message: '生成任务提交成功，正在后台渲染中'
+    });
+  } catch (err: any) {
+    console.error('[Dreamina Generate Error]', err);
+    res.status(500).json({ error: '提交即梦生成任务失败: ' + err.message });
+  }
+});
+
+// 4. 获取即梦任务列表
+router.get('/dreamina/tasks', authMiddleware, permissionMiddleware('ai', 'admin', 'content', 'product', 'articles'), (req: Request, res: Response) => {
+  try {
+    const tasks = sqlite.prepare(`
+      SELECT t.id, t.submit_id, t.prompt, t.task_type, t.status, t.result_urls, t.fail_reason, t.created_at, t.updated_at, u.name as user_name
+      FROM dreamina_tasks t
+      LEFT JOIN users u ON t.user_id = u.id
+      ORDER BY t.created_at DESC
+      LIMIT 100
+    `).all() as any[];
+
+    const formattedTasks = tasks.map(t => {
+      let urls = [];
+      try {
+        urls = t.result_urls ? JSON.parse(t.result_urls) : [];
+      } catch (e) {}
+      return { ...t, result_urls: urls };
+    });
+
+    res.json(formattedTasks);
+  } catch (err: any) {
+    console.error('[Dreamina Tasks Error]', err);
+    res.status(500).json({ error: '获取即梦任务列表失败' });
+  }
+});
+
+// 5. 查询具体任务渲染结果
+router.get('/dreamina/tasks/:submitId', authMiddleware, permissionMiddleware('ai', 'admin', 'content', 'product', 'articles'), (req: Request, res: Response) => {
+  try {
+    const task = sqlite.prepare(`
+      SELECT * FROM dreamina_tasks WHERE submit_id = ?
+    `).get(req.params.submitId) as any;
+
+    if (!task) {
+      res.status(404).json({ error: '未找到该生成任务' });
+      return;
+    }
+
+    let urls = [];
+    try {
+      urls = task.result_urls ? JSON.parse(task.result_urls) : [];
+    } catch (e) {}
+
+    res.json({ ...task, result_urls: urls });
+  } catch (err: any) {
+    console.error('[Dreamina Task Query Error]', err);
+    res.status(500).json({ error: '查询生成任务失败' });
   }
 });
 

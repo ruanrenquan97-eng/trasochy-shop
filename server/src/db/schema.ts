@@ -114,7 +114,7 @@ export const orders = sqliteTable('orders', {
   orderNo:       text('order_no').notNull().unique(),
   userId:        integer('user_id').notNull().references(() => users.id),
   userLevel:     text('user_level').notNull(),   // 下单时的等级（快照）
-  status:        text('status', { enum: ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'] }).notNull().default('pending'),
+  status:        text('status', { enum: ['pending', 'paid', 'processing', 'shipped', 'delivered', 'refund_requested', 'cancelled', 'refunded'] }).notNull().default('pending'),
   totalAmount:   real('total_amount').notNull(),
   discountAmount: real('discount_amount').notNull().default(0),
   payAmount:     real('pay_amount').notNull(),
@@ -266,3 +266,16 @@ export const skinAnalysisRecords = sqliteTable('skin_analysis_records', {
   createdAt:  integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// 即梦 AI 图像/视频生成任务表
+export const dreaminaTasks = sqliteTable('dreamina_tasks', {
+  id:         integer('id').primaryKey({ autoIncrement: true }),
+  submitId:   text('submit_id').notNull().unique(),
+  userId:     integer('user_id').references(() => users.id),
+  prompt:     text('prompt').notNull(),
+  taskType:   text('task_type').notNull(), // 'text2image' | 'image2video' 等
+  status:     text('status').notNull().default('querying'), // 'querying' | 'success' | 'fail'
+  resultUrls: text('result_urls'), // JSON 字符串，存生成的文件路径数组
+  failReason: text('fail_reason'),
+  createdAt:  integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt:  integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});

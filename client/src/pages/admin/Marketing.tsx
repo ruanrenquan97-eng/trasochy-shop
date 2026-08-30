@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { Save, Upload, ImageIcon, AlertTriangle, CheckCircle2, Bot, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Save, Upload, ImageIcon, AlertTriangle, CheckCircle2, Bot, RefreshCw, Puzzle, ChevronDown, ChevronUp, FileText, Gift } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import AdminCoupons from './Coupons';
+import AdminSurveyManage from './SurveyManage';
 import AdminIngredients from './Ingredients';
 import AdminBrandStoryConfig from './BrandStoryConfig';
 import { useMutation } from '@tanstack/react-query';
@@ -61,7 +64,7 @@ const PAGE_CONTENT_KEYS = [
   { key: 'page_privacy', label: '隐私政策', path: '/privacy' },
 ];
 
-type TabType = 'pages' | 'promo' | 'points' | 'features' | 'ingredients' | 'brand_story';
+type TabType = 'pages' | 'promo' | 'points' | 'coupons' | 'surveys' | 'features' | 'ingredients' | 'brand_story';
 
 export default function MarketingPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -70,7 +73,16 @@ export default function MarketingPage() {
   const [message, setMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [uploading, setUploading] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<TabType>('pages');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromQuery = (searchParams.get('tab') as TabType) || 'pages';
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromQuery);
+
+  useEffect(() => {
+    const t = searchParams.get('tab') as TabType;
+    if (t && t !== activeTab) {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
   const [activePageKey, setActivePageKey] = useState('page_contact');
   const [langTab, setLangTab] = useState('zh');
   const [translations, setTranslations] = useState<Record<string, any>>({});
@@ -349,6 +361,8 @@ export default function MarketingPage() {
     { key: 'pages', label: '页面内容管理' },
     { key: 'promo', label: '促销活动' },
     { key: 'points', label: '积分与推荐' },
+    { key: 'coupons', label: '代金券系统' },
+    { key: 'surveys', label: '调研问卷库' },
     { key: 'features', label: '功能开关' },
     { key: 'ingredients', label: '成分百科' },
     { key: 'brand_story', label: '品牌技术配置' },
@@ -363,7 +377,7 @@ export default function MarketingPage() {
         {tabs.map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => { setActiveTab(tab.key); setSearchParams({ tab: tab.key }); }}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
@@ -792,20 +806,44 @@ export default function MarketingPage() {
         </div>
       )}
 
+      {activeTab === 'coupons' && (
+        <AdminCoupons />
+      )}
+
       {activeTab === 'features' && (
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">高级功能开关</h2>
-          <p className="text-sm text-gray-500 mb-6">您可以在此随时开启或关闭商城的特定高级功能模块，即开即用。</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
-            {[
-              'feature_ingredient_glossary', 'feature_skin_concern_filter', 'feature_before_after_gallery', 
-              'feature_gifting', 'feature_free_samples', 'feature_partner_tier', 'feature_story_pages',
-              'feature_ai_quiz', 'feature_subscriptions', 'feature_abandoned_cart', 'feature_restock_notify', 'feature_ai_chatbot', 'feature_ai_operations', 'feature_company_intro'
-            ].map((key, index) => {
-              const colIndex = index % 3;
-              const bgClass = colIndex === 0 ? 'bg-blue-50/50 border-blue-100' : colIndex === 1 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-orange-50/50 border-orange-100';
-              return renderToggle(key, '已在系统前端开启并展示', '目前处于隐藏关闭状态', `px-4 rounded-xl border ${bgClass}`);
-            })}
+        <div className="space-y-6">
+          {/* ── AI 护肤问卷调查插件卡片 ── */}
+          <QuizPluginCard
+            isActive={settings['feature_ai_quiz'] === '1'}
+            onToggle={async (next) => {
+              const val = next ? '1' : '0';
+              setSettings(s => ({ ...s, feature_ai_quiz: val }));
+              try {
+                await api.put('/admin/settings/feature_ai_quiz', { value: val });
+                toast.success(next ? '问卷插件已开启' : '问卷插件已关闭');
+              } catch {
+                setSettings(s => ({ ...s, feature_ai_quiz: next ? '0' : '1' }));
+                toast.error('操作失败');
+              }
+            }}
+          />
+
+          {/* ── 其他高级功能开关 ── */}
+          <div className="bg-white rounded-xl shadow-sm border p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">其他功能开关</h2>
+            <p className="text-sm text-gray-500 mb-6">您可以在此随时开启或关闭商城的特定高级功能模块，即开即用。</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-2">
+              {[
+                'feature_ingredient_glossary', 'feature_skin_concern_filter', 'feature_before_after_gallery',
+                'feature_gifting', 'feature_free_samples', 'feature_partner_tier', 'feature_story_pages',
+                'feature_subscriptions', 'feature_abandoned_cart', 'feature_restock_notify',
+                'feature_ai_chatbot', 'feature_ai_operations', 'feature_company_intro'
+              ].map((key, index) => {
+                const colIndex = index % 3;
+                const bgClass = colIndex === 0 ? 'bg-blue-50/50 border-blue-100' : colIndex === 1 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-orange-50/50 border-orange-100';
+                return renderToggle(key, '已在系统前端开启并展示', '目前处于隐藏关闭状态', `px-4 rounded-xl border ${bgClass}`);
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -814,10 +852,470 @@ export default function MarketingPage() {
         <AdminIngredients />
       )}
 
+      {activeTab === 'surveys' && (
+        <AdminSurveyManage />
+      )}
+
       {activeTab === 'brand_story' && (
         <AdminBrandStoryConfig />
       )}
 
+    </div>
+  );
+}
+
+
+// ================================================================
+// ================================================================
+// AI 护肤问卷调查插件卡片（题目设计、流程跳转与提示词）
+// ================================================================
+
+const DEFAULT_QUESTIONS_ZH = [
+  {
+    id: 'skin_type',
+    question: '您的肤质属于哪一种？',
+    options: [
+      { label: '干性皮肤', value: 'dry', desc: '经常感到紧绷，容易脱皮' },
+      { label: '油性皮肤', value: 'oily', desc: '全脸容易出油，毛孔粗大' },
+      { label: '混合性皮肤', value: 'combination', desc: 'T区出油，U区偏干' },
+      { label: '敏感性皮肤', value: 'sensitive', desc: '容易泛红、发痒、刺痛' },
+    ],
+  },
+  {
+    id: 'primary_concern',
+    question: '您目前最主要的护肤诉求是什么？',
+    options: [
+      { label: '抗老紧致', value: 'anti-aging', desc: '淡化细纹，提升面部轮廓' },
+      { label: '美白淡斑', value: 'brightening', desc: '改善暗沉，均匀肤色' },
+      { label: '祛痘控油', value: 'acne', desc: '抑制痘痘，平衡水油' },
+      { label: '补水保湿', value: 'hydrating', desc: '深层补水，强韧屏障' },
+    ],
+  },
+  {
+    id: 'age_group',
+    question: '您的年龄段是？',
+    options: [
+      { label: '20岁以下', value: 'under-20', desc: '基础保湿防晒为主' },
+      { label: '20 - 30岁', value: '20-30', desc: '初抗老，维持肌肤稳定' },
+      { label: '30 - 40岁', value: '30-40', desc: '深度抗老，淡化干纹细纹' },
+      { label: '40岁以上', value: 'over-40', desc: '全面提拉紧致，密集修护' },
+    ],
+  },
+];
+
+function QuizPluginCard({ isActive, onToggle }: { isActive: boolean; onToggle: (next: boolean) => Promise<void> }) {
+  const [expanded, setExpanded] = useState(false);
+  const [toggling, setToggling] = useState(false);
+  const [configLoaded, setConfigLoaded] = useState(false);
+
+  // ── 题目编辑状态 ──
+  const [activeLang, setActiveLang] = useState<'zh' | 'en' | 'de'>('zh');
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [questionsSaving, setQuestionsSaving] = useState(false);
+  const [expandedQ, setExpandedQ] = useState<number | null>(null);
+
+  // ── 流程设置状态 ──
+  const [maxDynamic, setMaxDynamic] = useState('7');
+  const [requireLogin, setRequireLogin] = useState(false);
+  const [flowSaving, setFlowSaving] = useState(false);
+
+  // ── AI 提示词状态 ──
+  const [quizPrompt, setQuizPrompt] = useState('');
+  const [promptSaving, setPromptSaving] = useState(false);
+
+  const loadConfig = async () => {
+    if (configLoaded) return;
+    try {
+      const [qRes, flowRes, settingsRes]: any[] = await Promise.all([
+        api.get('/admin/quiz-questions?lang=zh'),
+        api.get('/admin/quiz-flow'),
+        api.get('/admin/settings'),
+      ]);
+      setQuestions(qRes.questions ?? DEFAULT_QUESTIONS_ZH);
+      setMaxDynamic(String(flowRes.quiz_max_dynamic_questions ?? '7'));
+      setRequireLogin(flowRes.quiz_require_login_for_result === '1');
+      const settingsMap: Record<string, string> = {};
+      if (Array.isArray(settingsRes)) {
+        settingsRes.forEach((s: any) => { settingsMap[s.key] = s.value; });
+      } else {
+        Object.assign(settingsMap, settingsRes);
+      }
+      setQuizPrompt(settingsMap['ai_quiz_prompt'] || '');
+      setConfigLoaded(true);
+    } catch {
+      toast.error('加载问卷配置失败');
+    }
+  };
+
+  const handleExpand = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next) loadConfig();
+  };
+
+  const handleToggle = async () => {
+    setToggling(true);
+    await onToggle(!isActive);
+    setToggling(false);
+  };
+
+  const handleLangChange = async (lang: 'zh' | 'en' | 'de') => {
+    setActiveLang(lang);
+    setExpandedQ(null);
+    try {
+      const res: any = await api.get(`/admin/quiz-questions?lang=${lang}`);
+      if (res.questions) {
+        setQuestions(res.questions);
+      } else {
+        setQuestions([]);
+      }
+    } catch {
+      toast.error('加载题目失败');
+    }
+  };
+
+  const handleSaveQuestions = async () => {
+    setQuestionsSaving(true);
+    try {
+      await api.put(`/admin/quiz-questions/${activeLang}`, { questions });
+      toast.success(`${activeLang.toUpperCase()} 问卷题目已保存`);
+    } catch {
+      toast.error('保存失败');
+    }
+    setQuestionsSaving(false);
+  };
+
+  const handleSaveFlow = async () => {
+    setFlowSaving(true);
+    try {
+      await api.put('/admin/quiz-flow', {
+        quiz_max_dynamic_questions: Number(maxDynamic),
+        quiz_require_login_for_result: requireLogin,
+      });
+      toast.success('流程设置已保存');
+    } catch {
+      toast.error('保存失败');
+    }
+    setFlowSaving(false);
+  };
+
+  const handleSavePrompt = async () => {
+    setPromptSaving(true);
+    try {
+      await api.put('/admin/settings/ai_quiz_prompt', { value: quizPrompt });
+      toast.success('AI 提示词已保存');
+    } catch {
+      toast.error('保存失败');
+    }
+    setPromptSaving(false);
+  };
+
+  const addQuestion = () => {
+    const newQ = { id: `q_${Date.now()}`, question: '', options: [{ label: '', value: `opt_${Date.now()}`, desc: '' }] };
+    setQuestions(prev => [...prev, newQ]);
+    setExpandedQ(questions.length);
+  };
+
+  const removeQuestion = (idx: number) => {
+    setQuestions(prev => prev.filter((_, i) => i !== idx));
+    setExpandedQ(null);
+  };
+
+  const updateQuestion = (idx: number, field: string, val: string) => {
+    setQuestions(prev => prev.map((q, i) => i === idx ? { ...q, [field]: val } : q));
+  };
+
+  const addOption = (qIdx: number) => {
+    setQuestions(prev => prev.map((q, i) => i === qIdx
+      ? { ...q, options: [...q.options, { label: '', value: `opt_${Date.now()}`, desc: '' }] }
+      : q
+    ));
+  };
+
+  const updateOption = (qIdx: number, oIdx: number, field: string, val: string) => {
+    setQuestions(prev => prev.map((q, i) => i === qIdx
+      ? { ...q, options: q.options.map((o: any, oi: number) => oi === oIdx ? { ...o, [field]: val } : o) }
+      : q
+    ));
+  };
+
+  const removeOption = (qIdx: number, oIdx: number) => {
+    setQuestions(prev => prev.map((q, i) => i === qIdx
+      ? { ...q, options: q.options.filter((_: any, oi: number) => oi !== oIdx) }
+      : q
+    ));
+  };
+
+  const moveQuestion = (idx: number, dir: -1 | 1) => {
+    const next = idx + dir;
+    if (next < 0 || next >= questions.length) return;
+    const arr = [...questions];
+    [arr[idx], arr[next]] = [arr[next], arr[idx]];
+    setQuestions(arr);
+    setExpandedQ(next);
+  };
+
+  return (
+    <div className={`rounded-2xl border-2 shadow-sm transition-colors ${isActive ? 'border-rose-200 bg-rose-50/30' : 'border-gray-200 bg-white'}`}>
+      {/* ── 卡片头部 ── */}
+      <div className="flex items-center gap-4 p-5">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-rose-500' : 'bg-gray-200'}`}>
+          <Puzzle className={`w-6 h-6 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-base font-semibold text-gray-900">AI 护肤问卷调查</h3>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isActive ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-500'}`}>
+              {isActive ? '运行中' : '已关闭'}
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5">聚焦护肤调研的核心题目设计、逻辑跳转及 AI 智能守护信生成。</p>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            type="button"
+            disabled={toggling}
+            onClick={handleToggle}
+            title={isActive ? '点击关闭插件' : '点击开启插件'}
+            className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${isActive ? 'bg-rose-500' : 'bg-gray-200'}`}
+          >
+            <span className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isActive ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+          <button
+            type="button"
+            onClick={handleExpand}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-700"
+          >
+            {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+        </div>
+      </div>
+
+      {/* ── 折叠摘要 ── */}
+      {!expanded && (
+        <div className="px-5 pb-4 flex items-center gap-6 flex-wrap text-xs text-gray-400 border-t border-gray-100 pt-3">
+          <span className="flex items-center gap-1.5"><FileText size={12} /> {configLoaded ? `${questions.length} 道固定题目` : '固定题目管理'}</span>
+          <span className="flex items-center gap-1.5"><Bot size={12} /> AI 动态追问上限 {maxDynamic} 题</span>
+          <button type="button" onClick={handleExpand} className="ml-auto text-rose-500 hover:text-rose-700 font-medium">配置问卷题目与流程 →</button>
+        </div>
+      )}
+
+      {/* ── 展开配置面板 ── */}
+      {expanded && (
+        <div className="border-t border-gray-100 divide-y divide-gray-100">
+
+          {/* 区块 1：固定题目设计 */}
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <FileText size={15} className="text-rose-500" />
+                <h4 className="text-sm font-semibold text-gray-800">护肤调研题目设计</h4>
+                <span className="text-xs text-gray-400">· 用户参与测肤必答的核心问题</span>
+              </div>
+              {/* 多语言切换 */}
+              <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
+                {(['zh', 'en', 'de'] as const).map(lang => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => handleLangChange(lang)}
+                    className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${activeLang === lang ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    {lang.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!configLoaded ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {questions.map((q: any, qIdx: number) => (
+                  <div key={q.id || qIdx} className="border border-gray-200 rounded-xl overflow-hidden">
+                    {/* 题目行 */}
+                    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50">
+                      <div className="flex flex-col gap-0.5 shrink-0">
+                        <button type="button" onClick={() => moveQuestion(qIdx, -1)} disabled={qIdx === 0} className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-gray-600 disabled:opacity-20 text-xs leading-none">▲</button>
+                        <button type="button" onClick={() => moveQuestion(qIdx, 1)} disabled={qIdx === questions.length - 1} className="w-4 h-4 flex items-center justify-center text-gray-300 hover:text-gray-600 disabled:opacity-20 text-xs leading-none">▼</button>
+                      </div>
+                      <span className="text-xs text-gray-400 font-mono shrink-0">Q{qIdx + 1}</span>
+                      <input
+                        type="text"
+                        value={q.question}
+                        onChange={e => updateQuestion(qIdx, 'question', e.target.value)}
+                        placeholder="请输入题目名称"
+                        className="flex-1 bg-transparent text-sm text-gray-800 focus:outline-none placeholder-gray-300 font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setExpandedQ(expandedQ === qIdx ? null : qIdx)}
+                        className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-200 transition-colors shrink-0"
+                      >
+                        {expandedQ === qIdx ? '收起选项' : `${q.options?.length ?? 0} 个选项`}
+                      </button>
+                      <button type="button" onClick={() => removeQuestion(qIdx)} className="text-gray-300 hover:text-red-400 transition-colors shrink-0 text-base leading-none">✕</button>
+                    </div>
+
+                    {/* 选项编辑 */}
+                    {expandedQ === qIdx && (
+                      <div className="px-4 py-3 border-t border-gray-100 space-y-2 bg-white">
+                        {(q.options || []).map((opt: any, oIdx: number) => (
+                          <div key={oIdx} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-300 font-mono w-5 shrink-0">{oIdx + 1}.</span>
+                            <input
+                              type="text"
+                              value={opt.label}
+                              onChange={e => updateOption(qIdx, oIdx, 'label', e.target.value)}
+                              placeholder="选项文本"
+                              className="w-32 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-rose-400 shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={opt.value}
+                              onChange={e => updateOption(qIdx, oIdx, 'value', e.target.value)}
+                              placeholder="识别值(英文)"
+                              className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-rose-400 shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={opt.desc}
+                              onChange={e => updateOption(qIdx, oIdx, 'desc', e.target.value)}
+                              placeholder="选项补充描述 (可选)"
+                              className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-rose-400"
+                            />
+                            <button type="button" onClick={() => removeOption(qIdx, oIdx)} className="text-gray-300 hover:text-red-400 shrink-0 text-sm leading-none">✕</button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => addOption(qIdx)}
+                          className="text-xs text-rose-500 hover:text-rose-700 font-medium flex items-center gap-1 mt-1"
+                        >
+                          + 添加选项
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={addQuestion}
+                  className="w-full border-2 border-dashed border-gray-200 rounded-xl py-3 text-sm text-gray-400 hover:border-rose-300 hover:text-rose-500 transition-colors"
+                >
+                  + 添加新调研题目
+                </button>
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                disabled={questionsSaving || !configLoaded}
+                onClick={handleSaveQuestions}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-500 text-white text-sm rounded-lg hover:bg-rose-600 transition-colors disabled:opacity-50"
+              >
+                <Save size={13} /> {questionsSaving ? '保存中...' : `保存 ${activeLang.toUpperCase()} 题目`}
+              </button>
+              {activeLang === 'zh' && (
+                <p className="text-xs text-gray-400">提示：保存中文后，可切换 EN / DE 维护对应语言的题目与选项</p>
+              )}
+            </div>
+          </div>
+
+          {/* 区块 2：流程与逻辑配置 */}
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Bot size={15} className="text-indigo-500" />
+              <h4 className="text-sm font-semibold text-gray-800">问卷流程与跳转控制</h4>
+              <span className="text-xs text-gray-400">· 动态追问上限与结果查看权限</span>
+            </div>
+            {!configLoaded ? (
+              <div className="space-y-3">
+                <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+                <div className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between py-3 border border-gray-100 rounded-xl px-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">AI 动态追问最大题数</p>
+                    <p className="text-xs text-gray-400 mt-0.5">固定题目答完后，AI 顾问最多追问几道题（填 0 代表禁用动态追问）</p>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={maxDynamic}
+                    onChange={e => setMaxDynamic(e.target.value)}
+                    className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <div className="flex items-center justify-between py-3 border border-gray-100 rounded-xl px-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">结果页强制登录后查看</p>
+                    <p className="text-xs text-gray-400 mt-0.5">开启后，未登录用户需注册/登录后方可解锁 AI 测肤方案</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRequireLogin(v => !v)}
+                    className={`relative inline-flex h-6 w-11 rounded-full border-2 border-transparent transition-colors ${requireLogin ? 'bg-indigo-500' : 'bg-gray-200'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${requireLogin ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={flowSaving || !configLoaded}
+              onClick={handleSaveFlow}
+              className="mt-4 flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              <Save size={13} /> {flowSaving ? '保存中...' : '保存流程设置'}
+            </button>
+          </div>
+
+          {/* 区块 3：AI 守护信提示词 */}
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Bot size={15} className="text-blue-500" />
+              <h4 className="text-sm font-semibold text-gray-800">AI 守护信生成提示词</h4>
+              <span className="text-xs text-gray-400">· 问卷结果页由 AI 生成的个性化专属护肤守护信</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-2">
+              支持变量（系统自动替换）：
+              <code className="bg-gray-100 px-1 rounded mx-0.5">{'{userAge}'}</code>
+              <code className="bg-gray-100 px-1 rounded mx-0.5">{'{userSkin}'}</code>
+              <code className="bg-gray-100 px-1 rounded mx-0.5">{'{userConcern}'}</code>
+              <code className="bg-gray-100 px-1 rounded mx-0.5">{'{productNames}'}</code>
+            </p>
+            {!configLoaded ? (
+              <div className="h-40 bg-gray-50 rounded-lg animate-pulse" />
+            ) : (
+              <textarea
+                value={quizPrompt}
+                onChange={e => setQuizPrompt(e.target.value)}
+                rows={8}
+                placeholder={`你是一位名为 TRASOCHY AI 的资深院线级护肤专家。\n现在有一位用户完成了测肤问卷：\n- 年龄段：{userAge}\n- 肤质：{userSkin}\n- 核心诉求：{userConcern}\n\n系统已为TA匹配了以下3款产品：{productNames}。请生成一封温暖专业的护肤守护信。`}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-400 resize-y"
+              />
+            )}
+            <button
+              type="button"
+              disabled={promptSaving || !configLoaded}
+              onClick={handleSavePrompt}
+              className="mt-3 flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              <Save size={13} /> {promptSaving ? '保存中...' : '保存 AI 提示词'}
+            </button>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }

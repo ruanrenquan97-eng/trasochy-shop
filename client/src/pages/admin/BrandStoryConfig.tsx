@@ -31,7 +31,7 @@ const TEXT_KEYS = [
   { key: 'bs_hero_subtitle', label: '首屏副标题', type: 'text', default: '透皮好吸收' },
   { key: 'bs_hero_desc', label: '首屏描述', type: 'textarea', default: '全球生物透皮递送技术领导者' },
   { key: 'bs_sec1_title', label: '概览标题', type: 'text', default: '品牌概览' },
-  { key: 'bs_sec1_subtitle', label: '概览副标题', type: 'text', default: '依托领先的生物透皮技术与绿色合成生物制造' },
+  { key: 'bs_sec1_subtitle', label: '概览副标题', type: 'text', default: '依托先进的生物透皮技术与绿色合成生物制造' },
   { key: 'bs_sec1_desc', label: '概览描述', type: 'textarea', default: '美尔健生物 是一家专注新型生物功效活性材料开发、制造与整体方案输出的国家高新科技企业。我们以生物科技为核心，专注于活性成分与透皮递送技术的研发与产业化，构建从分子设计、原料制造到应用解决方案的完整能力体系，为全球品牌提供可信赖的技术支持。' },
   { key: 'bs_sec1_list1', label: '概览亮点 1', type: 'text', default: '专注“皮肤抗衰老分子”、“海洋蓝色分子”和“特色植物资源”研究' },
   { key: 'bs_sec1_list2', label: '概览亮点 2', type: 'text', default: '全球独创的第三代生物透皮技术' },
@@ -43,7 +43,7 @@ const TEXT_KEYS = [
   { key: 'bs_tech1_title', label: '技术模块1标题', type: 'text', default: 'AI 分子设计' },
   { key: 'bs_tech1_desc', label: '技术模块1描述', type: 'textarea', default: '覆盖分子/细胞层面的设计与机理研究，支撑核心透皮技术迭代。基于AI深度学习高效筛选与优化活性分子/功能原料。' },
   { key: 'bs_tech2_title', label: '技术模块2标题', type: 'text', default: '生物透皮递送' },
-  { key: 'bs_tech2_desc', label: '技术模块2描述', type: 'textarea', default: '全球领先的cTDP促渗透机理，解决大分子难穿过角质层致密“砖墙结构”的行业难题，让活性物深层起效。' },
+  { key: 'bs_tech2_desc', label: '技术模块2描述', type: 'textarea', default: '自主创新的cTDP促渗透机理，解决大分子难穿过角质层致密“砖墙结构”的行业难题，让活性物深层起效。' },
   { key: 'bs_tech3_title', label: '技术模块3标题', type: 'text', default: '合成生物制造' },
   { key: 'bs_tech3_desc', label: '技术模块3描述', type: 'textarea', default: '从菌株构建、发酵放大到纯化制备的规模化生产，形成从设计到落地的闭环能力，保障稳定量产。' },
   { key: 'bs_ctdp_title', label: 'cTDP大标题', type: 'text', default: 'cTDP 促渗透机理与过程' },
@@ -59,7 +59,7 @@ const TEXT_KEYS = [
   { key: 'bs_team_title', label: '研发团队大标题', type: 'text', default: '瑞士创新中心 (MSIC)' },
   { key: 'bs_team_desc', label: '研发团队描述', type: 'textarea', default: '以中瑞技术连接为纽带，融合瑞士抗衰理念与先进透皮技术，推动关键成果的应用转化与产品升级，形成更完善的研发验证体系与持续创新能力。' },
   { key: 'bs_quote_title', label: '底部语录标题', type: 'text', default: '中瑞联合研发与技术共创' },
-  { key: 'bs_quote_desc', label: '底部语录正文', type: 'textarea', default: '瑞士端负责欧洲创新原料开发、方法开发、机理验证及人体功效设计与数据规范；中国端负责产业化转化与高效交付，形成贯通上游创新与下游制造的完美闭环体系。' },
+  { key: 'bs_quote_desc', label: '底部语录正文', type: 'textarea', default: '瑞士端负责欧洲创新原料开发、方法开发、机理验证及人体功效设计与数据规范；中国端负责产业化转化与高效交付，形成贯通上游创新与下游制造的完整闭环体系。' },
 ];
 
 export default function BrandStoryConfig() {
